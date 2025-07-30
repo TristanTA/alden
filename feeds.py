@@ -112,7 +112,13 @@ def summarize_articles(articles, openai_api_key):
         content = get_article_content(article["link"])
         if not content:
             continue
-        prompt = f"Summarize the following article in 3–5 bullet points:\n\nTitle: {article['title']}\n\n{content}"
+        prompt = f"""
+Summarize the following article in 3–5 bullet points with clear context and concise tone. Include why the article might matter to the reader at the end.
+
+Title: {article['title']}
+
+{content}
+"""
         try:
             response = openai.ChatCompletion.create(
                 model="gpt-4o",
@@ -142,6 +148,7 @@ def generate_email_html(summaries):
             </p>
         </div>
         """
+    html += "<hr><p style='text-align:center;'>That's a wrap for today. Stay curious, stay caffeinated. ☕📰</p>"
     return html
 
 if __name__ == "__main__":
