@@ -148,7 +148,7 @@ def generate_email_html(summaries):
             </p>
         </div>
         """
-    html += "<hr><p style='text-align:center;'>That's a wrap for today. Stay curious, stay caffeinated. ☕📰</p>"
+    html += "<hr><p style='text-align:center;'>Brief delivered. Perspective gained. Your move, universe. </p>"
     return html
 
 if __name__ == "__main__":
