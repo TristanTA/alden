@@ -1,4 +1,5 @@
 # alden.py
+
 import os
 from dotenv import load_dotenv
 from email.mime.text import MIMEText
@@ -17,24 +18,27 @@ email_to = os.getenv("EMAIL_TO")
 articles = feeds.get_all_titles()
 print(f"✅ Fetched {len(articles)} articles")
 
-# Step 2: Load feedback and pick relevant articles
+# Step 2: Load feedback and pick relevant article links
 feedback = feeds.load_feedback()
 print(f"Loaded feedback with {len(feedback['sources'])} sources and {len(feedback['keywords'])} keywords.")
-selected_titles = feeds.choose_relevant_articles(articles, feedback)
-print(f"Selected {len(selected_titles)} articles for summarization.")
-selected_links = [a for a in articles if a["link"] in selected_titles]
 
-print(f"Found {len(selected_links)} articles matching selected titles.") 
+selected_links = feeds.choose_relevant_articles(articles, feedback)
+print(f"🧠 GPT selected {len(selected_links)} article links for summarization.")
+print("🔗 Links:", selected_links)
 
-# Step 3: Summarize selected articles
-summaries = feeds.summarize_articles(selected_links)
-print(f"Generated {len(summaries)} summaries.")
+# Step 3: Match selected articles by link
+selected_articles = [a for a in articles if a["link"] in selected_links]
+print(f"🔍 Matched {len(selected_articles)} articles from fetched list.")
 
-# Step 4: Generate styled HTML
+# Step 4: Summarize selected articles
+summaries = feeds.summarize_articles(selected_articles)
+print(f"📝 Generated {len(summaries)} summaries.")
+
+# Step 5: Generate styled HTML
 html_content = feeds.generate_email_html(summaries)
-print("Generated email HTML.")
+print("📨 Generated email HTML.")
 
-# Step 5: Send email
+# Step 6: Send email
 msg = MIMEText(html_content, "html")
 msg['Subject'] = "Your Daily Briefing – Alden"
 msg['From'] = email_user
