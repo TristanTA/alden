@@ -122,16 +122,19 @@ def summarize_articles(articles):
         if not content:
             continue
         prompt = f"""
-You are Alden, a smart and entertaining assistant.
-Summarize this article in 3–5 bullet points.
-- Use wit and insight.
-- Include why it might matter at the end.
-- Help the user stay sharp AND curious.
+        You are Alden, a smart and entertaining assistant.
+        Summarize this article clearly in:
+        - A one-line TL;DR at the top
+        - 2–4 bullet points after that
+        - Keep it brief, insightful, and just snarky enough
 
-Title: {article['title']}
+        End with a final note: “Why it matters.”
 
-{content}
-"""
+        Title: {article['title']}
+
+        {content}
+        """
+        
         try:
             response = client.chat.completions.create(
                 model="gpt-4o",
@@ -155,7 +158,7 @@ def generate_email_html(summaries):
     html = """
     <html><body style='font-family:sans-serif; max-width:700px; margin:auto;'>
     <h2 style='color:#2b2b2b;'>🧠 Alden's Daily Brief</h2>
-    <p>Fresh news. Smart takes. Just enough snark to make your coffee nervous.</p><hr>
+    <p>While others doomscroll, you just… know things.</p><hr>
     """
     for i, summary in enumerate(summaries):
         title = summary['title']
