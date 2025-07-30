@@ -19,7 +19,7 @@ print(f"✅ Fetched {len(articles)} articles")
 
 # Step 2: Load feedback and pick relevant articles
 feedback = feeds.load_feedback()
-selected_titles = feeds.choose_relevant_articles(articles, feedback, openai_key)
+selected_titles = feeds.choose_relevant_articles(articles, feedback)
 selected_articles = [a for a in articles if a["title"] in selected_titles]
 
 # Step 3: Summarize selected articles
