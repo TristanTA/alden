@@ -7,6 +7,9 @@ from email.mime.text import MIMEText
 from dotenv import load_dotenv
 load_dotenv()
 
+
+client = openai.OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 # --- Load secrets from environment ---
 openai.api_key = os.getenv("OPENAI_API_KEY")
 email_user = os.getenv("EMAIL_USER")
@@ -26,7 +29,7 @@ for entry in feed.entries[:5]:
 prompt = f"Alden, summarize the following news in clear, calm language with 3-5 concise bullet points:\n\n" + "\n\n".join(articles)
 
 # --- Summarize via GPT-4o ---
-response = openai.ChatCompletion.create(
+response = client.chat.completions.create(
     model="gpt-4o",
     messages=[{"role": "user", "content": prompt}],
     max_tokens=500
