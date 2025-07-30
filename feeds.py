@@ -67,14 +67,14 @@ def load_feedback(filepath="feedback.json"):
         return json.load(f)
 
 
-def choose_relevant_articles(titles, feedback):
+def choose_relevant_articles(articles, feedback):
     source_weights = feedback.get("sources", {})
     keyword_weights = feedback.get("keywords", {})
 
     source_prefs = ", ".join([f"{k}: {v}" for k, v in source_weights.items()])
     keyword_prefs = ", ".join([f"{k}: {v}" for k, v in keyword_weights.items()])
 
-    headline_list = "\n".join([f"- {a['title']} (source: {a['source']})" for a in titles])
+    headline_list = "\n".join([f"- {a['title']} (source: {a['source']}) [link: {a['link']}]" for a in articles])
 
     prompt = f"""
 You are Alden, a savvy and slightly cheeky assistant who helps a human stay informed without drowning in noise.
@@ -90,7 +90,8 @@ Keywords: {keyword_prefs}
 Today's headlines:
 {headline_list}
 
-Pick 5–8 headlines for Alden to summarize. Choose based on relevance AND diversity. Return only the exact URLs. No commentary.
+Pick 5–8 headlines for Alden to summarize. Choose based on relevance AND diversity.
+Return only the exact URLs, one per line. No commentary.
 """
     response = client.chat.completions.create(
         model="gpt-4o",
@@ -98,8 +99,8 @@ Pick 5–8 headlines for Alden to summarize. Choose based on relevance AND diver
         max_tokens=500
     )
     chosen_text = response.choices[0].message.content.strip()
-    selected_titles = [line.strip("- ") for line in chosen_text.split("\n") if line.strip()]
-    return selected_titles
+    selected_links = [line.strip() for line in chosen_text.split("\n") if line.strip()]
+    return selected_links
 
 
 def get_article_content(url):
@@ -186,12 +187,16 @@ if __name__ == "__main__":
 
     feedback = load_feedback()
     print(f"Loaded feedback with {len(feedback['sources'])} sources and {len(feedback['keywords'])} keywords.")
-    selected_titles = choose_relevant_articles(articles, feedback)
-    print(f"Selected {len(selected_titles)} articles for summarization.")
-    selected_links = [a for a in articles if a["link"] in selected_titles]
-    print(f"Found {len(selected_l9nks)} articles matching selected titles.")
-    summaries = summarize_articles(selected_links)
+
+    selected_links = choose_relevant_articles(articles, feedback)
+    print(f"Selected {len(selected_links)} article links for summarization.")
+
+    selected_articles = [a for a in articles if a["link"] in selected_links]
+    print(f"Matched {len(selected_articles)} articles by link.")
+
+    summaries = summarize_articles(selected_articles)
     print(f"Generated {len(summaries)} summaries.")
+
     email_html = generate_email_html(summaries)
     print("Generated email HTML.")
 
