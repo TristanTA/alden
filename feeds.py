@@ -185,11 +185,15 @@ if __name__ == "__main__":
     print(f"Fetched {len(articles)} articles.")
 
     feedback = load_feedback()
+    print(f"Loaded feedback with {len(feedback['sources'])} sources and {len(feedback['keywords'])} keywords.")
     selected_titles = choose_relevant_articles(articles, feedback)
+    print(f"Selected {len(selected_titles)} articles for summarization.")
     selected_articles = [a for a in articles if a["title"] in selected_titles]
-
+    print(f"Found {len(selected_articles)} articles matching selected titles.")
     summaries = summarize_articles(selected_articles)
+    print(f"Generated {len(summaries)} summaries.")
     email_html = generate_email_html(summaries)
+    print("Generated email HTML.")
 
     with open("daily_email_preview.html", "w", encoding="utf-8") as f:
         f.write(email_html)
