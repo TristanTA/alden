@@ -1,4 +1,4 @@
-# alden/feeds.py
+# alden/feeds.py (fully updated)
 
 import feedparser
 from urllib.parse import urlparse
@@ -72,20 +72,20 @@ def choose_relevant_articles(titles, feedback, openai_api_key):
     headline_list = "\n".join([f"- {a['title']} (source: {a['source']})" for a in titles])
 
     prompt = f"""
-You are Alden, a witty, insightful assistant who delivers a news briefing each day.
-Your goals:
-1. Prioritize stories aligned with the user's preferences.
-2. Include at least one surprising or diverse perspective to avoid echo chambers.
-3. Keep it fresh. Keep it sharp.
+You are Alden, a savvy and slightly cheeky assistant who helps a human stay informed without drowning in noise.
+They want:
+1. Personalized news that aligns with their preferences.
+2. A mix of fresh or opposing viewpoints to escape the echo chamber.
+3. Wit and conciseness, not boredom.
 
-User Preferences:
+Preferences:
 Sources: {source_prefs}
 Keywords: {keyword_prefs}
 
-Today’s headlines:
+Today's headlines:
 {headline_list}
 
-Select 5–8 headlines to summarize. Return only the exact titles.
+Pick 5–8 headlines for Alden to summarize. Choose based on relevance AND diversity. Return only the exact headlines. No commentary.
 """
     response = openai.ChatCompletion.create(
         model="gpt-4o",
@@ -115,12 +115,11 @@ def summarize_articles(articles, openai_api_key):
         if not content:
             continue
         prompt = f"""
-You are Alden, a clever and concise assistant summarizing today’s news.
-Summarize the following article in 3–5 engaging bullet points that:
-- Clearly explain what’s happening
-- Add relevant context
-- Mention why this matters (especially to a curious, tech-minded reader)
-- Use a witty but respectful tone, not dry or robotic
+You are Alden, a smart and entertaining assistant.
+Summarize this article in 3–5 bullet points.
+- Use wit and insight.
+- Include why it might matter at the end.
+- Help the user stay sharp AND curious.
 
 Title: {article['title']}
 
@@ -130,7 +129,7 @@ Title: {article['title']}
             response = openai.ChatCompletion.create(
                 model="gpt-4o",
                 messages=[{"role": "user", "content": prompt}],
-                max_tokens=300
+                max_tokens=400
             )
             summary = response.choices[0].message.content.strip()
             summaries.append({"title": article["title"], "summary": summary, "link": article["link"]})
@@ -140,42 +139,26 @@ Title: {article['title']}
 
 def generate_email_html(summaries):
     html = """
-    <html>
-    <head>
-        <style>
-            body { font-family: 'Segoe UI', sans-serif; background: #f8f9fa; padding: 20px; color: #212529; }
-            .container { max-width: 800px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.05); padding: 20px; }
-            h2 { text-align: center; color: #444; }
-            .story { border-bottom: 1px solid #e0e0e0; padding-bottom: 16px; margin-bottom: 16px; }
-            .story:last-child { border: none; }
-            .title { font-size: 18px; font-weight: bold; }
-            .summary { margin: 8px 0; line-height: 1.5; }
-            .feedback { font-size: 14px; }
-            .footer { text-align: center; margin-top: 30px; color: #888; font-size: 14px; }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h2>Alden's Daily Brief</h2>
+    <html><body style='font-family:sans-serif; max-width:700px; margin:auto;'>
+    <h2 style='color:#2b2b2b;'>🧠 Alden's Daily Brief</h2>
+    <p>Fresh news. Smart takes. Just enough snark to make your coffee nervous.</p><hr>
     """
     for i, summary in enumerate(summaries):
+        title = summary['title']
+        content = summary['summary'].replace('\n', '<br>')
+        link = summary['link']
         html += f"""
-            <div class='story'>
-                <div class='title'>{summary['title']}</div>
-                <div class='summary'>{summary['summary'].replace('\n', '<br>')}</div>
-                <div><a href='{summary['link']}'>Read more</a></div>
-                <div class='feedback'>
-                    <a href='https://example.com/feedback?article={i}&vote=up'>👍</a>
-                    <a href='https://example.com/feedback?article={i}&vote=down'>👎</a>
-                </div>
-            </div>
-        """
-    html += """
-            <div class='footer'>Brief delivered. Perspective gained. Your move, universe.</div>
+        <div style='margin-bottom:30px;'>
+            <h3 style='color:#003366;'>{title}</h3>
+            <p>{content}</p>
+            <p><a href='{link}'>Read full story</a></p>
+            <p>
+                <a href='https://example.com/feedback?article={i}&vote=up'>👍</a>
+                <a href='https://example.com/feedback?article={i}&vote=down'>👎</a>
+            </p>
         </div>
-    </body>
-    </html>
-    """
+        """
+    html += "<hr><p style='text-align:center; font-style:italic;'>Another day, another download of human happenings. Alden out. 🛰️</p></body></html>"
     return html
 
 if __name__ == "__main__":
