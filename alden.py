@@ -23,7 +23,7 @@ selected_titles = feeds.choose_relevant_articles(articles, feedback)
 selected_articles = [a for a in articles if a["title"] in selected_titles]
 
 # Step 3: Summarize selected articles
-summaries = feeds.summarize_articles(selected_articles, openai_key)
+summaries = feeds.summarize_articles(selected_articles)
 
 # Step 4: Generate styled HTML
 html_content = feeds.generate_email_html(summaries)
