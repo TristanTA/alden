@@ -1,12 +1,14 @@
-# alden/feeds.py (fully updated)
+# alden/feeds.py (fully updated + fixed for OpenAI SDK v1.0+)
 
 import feedparser
 from urllib.parse import urlparse
 import os
 import json
-import openai
 import requests
 from bs4 import BeautifulSoup
+from openai import OpenAI
+
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # Define feeds by topic
 RSS_FEEDS = {
@@ -61,8 +63,7 @@ def load_feedback(filepath="feedback.json"):
     with open(filepath, "r") as f:
         return json.load(f)
 
-def choose_relevant_articles(titles, feedback, openai_api_key):
-    openai.api_key = openai_api_key
+def choose_relevant_articles(titles, feedback):
     source_weights = feedback.get("sources", {})
     keyword_weights = feedback.get("keywords", {})
 
@@ -87,7 +88,7 @@ Today's headlines:
 
 Pick 5–8 headlines for Alden to summarize. Choose based on relevance AND diversity. Return only the exact headlines. No commentary.
 """
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4o",
         messages=[{"role": "user", "content": prompt}],
         max_tokens=500
@@ -107,8 +108,7 @@ def get_article_content(url):
         print(f"Error fetching article content from {url}: {e}")
         return ""
 
-def summarize_articles(articles, openai_api_key):
-    openai.api_key = openai_api_key
+def summarize_articles(articles):
     summaries = []
     for article in articles:
         content = get_article_content(article["link"])
@@ -126,7 +126,7 @@ Title: {article['title']}
 {content}
 """
         try:
-            response = openai.ChatCompletion.create(
+            response = client.chat.completions.create(
                 model="gpt-4o",
                 messages=[{"role": "user", "content": prompt}],
                 max_tokens=400
@@ -166,10 +166,10 @@ if __name__ == "__main__":
     print(f"Fetched {len(articles)} articles.")
 
     feedback = load_feedback()
-    selected_titles = choose_relevant_articles(articles, feedback, os.getenv("OPENAI_API_KEY"))
+    selected_titles = choose_relevant_articles(articles, feedback)
     selected_articles = [a for a in articles if a["title"] in selected_titles]
 
-    summaries = summarize_articles(selected_articles, os.getenv("OPENAI_API_KEY"))
+    summaries = summarize_articles(selected_articles)
     email_html = generate_email_html(summaries)
 
     with open("daily_email_preview.html", "w", encoding="utf-8") as f:
