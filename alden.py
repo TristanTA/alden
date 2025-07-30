@@ -4,6 +4,8 @@ import openai
 import os
 import smtplib
 from email.mime.text import MIMEText
+from dotenv import load_dotenv
+load_dotenv()
 
 # --- Load secrets from environment ---
 openai.api_key = os.getenv("OPENAI_API_KEY")
