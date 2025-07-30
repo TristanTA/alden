@@ -22,17 +22,12 @@ feedback = feeds.load_feedback()
 print(f"Loaded feedback with {len(feedback['sources'])} sources and {len(feedback['keywords'])} keywords.")
 selected_titles = feeds.choose_relevant_articles(articles, feedback)
 print(f"Selected {len(selected_titles)} articles for summarization.")
-selected_articles = []
-for a in articles:
-    for t in selected_titles:
-        if a["title"].strip().lower() == t.strip().lower():
-            selected_articles.append(a)
-            break
+selected_links = [a for a in articles if a["link"] in selected_titles]
 
-print(f"Found {len(selected_articles)} articles matching selected titles.") 
+print(f"Found {len(selected_links)} articles matching selected titles.") 
 
 # Step 3: Summarize selected articles
-summaries = feeds.summarize_articles(selected_articles)
+summaries = feeds.summarize_articles(selected_links)
 print(f"Generated {len(summaries)} summaries.")
 
 # Step 4: Generate styled HTML
