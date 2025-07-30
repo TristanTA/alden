@@ -24,7 +24,6 @@ print(f"Loaded feedback with {len(feedback['sources'])} sources and {len(feedbac
 
 selected_links = feeds.choose_relevant_articles(articles, feedback)
 print(f"🧠 GPT selected {len(selected_links)} article links for summarization.")
-print("🔗 Links:", selected_links)
 
 # Step 3: Match selected articles by link
 selected_articles = [a for a in articles if a["link"] in selected_links]
