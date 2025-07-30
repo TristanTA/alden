@@ -1,4 +1,4 @@
-# alden/feeds.py (fully updated + fixed for OpenAI SDK v1.0+)
+# alden/feeds.py
 
 import feedparser
 from urllib.parse import urlparse
@@ -37,6 +37,7 @@ RSS_FEEDS = {
     ]
 }
 
+
 def get_all_titles():
     all_articles = []
     for category, urls in RSS_FEEDS.items():
@@ -55,6 +56,7 @@ def get_all_titles():
                 print(f"Failed to parse {url}: {e}")
     return all_articles
 
+
 def load_feedback(filepath="feedback.json"):
     if not os.path.exists(filepath):
         feedback = {"sources": {}, "keywords": {}}
@@ -63,6 +65,7 @@ def load_feedback(filepath="feedback.json"):
         return feedback
     with open(filepath, "r") as f:
         return json.load(f)
+
 
 def choose_relevant_articles(titles, feedback):
     source_weights = feedback.get("sources", {})
@@ -98,6 +101,7 @@ Pick 5–8 headlines for Alden to summarize. Choose based on relevance AND diver
     selected_titles = [line.strip("- ") for line in chosen_text.split("\n") if line.strip()]
     return selected_titles
 
+
 def get_article_content(url):
     try:
         response = requests.get(url, timeout=10)
@@ -108,6 +112,7 @@ def get_article_content(url):
     except Exception as e:
         print(f"Error fetching article content from {url}: {e}")
         return ""
+
 
 def summarize_articles(articles):
     summaries = []
@@ -133,10 +138,17 @@ Title: {article['title']}
                 max_tokens=400
             )
             summary = response.choices[0].message.content.strip()
-            summaries.append({"title": article["title"], "summary": summary, "link": article["link"]})
+            summaries.append({
+                "title": article["title"],
+                "summary": summary,
+                "link": article["link"],
+                "category": article["category"],
+                "source": article["source"]
+            })
         except Exception as e:
             print(f"Failed to summarize article: {article['title']}: {e}")
     return summaries
+
 
 def generate_email_html(summaries):
     html = """
@@ -150,15 +162,23 @@ def generate_email_html(summaries):
         link = summary['link']
         feedback_up = f"{FEEDBACK_URL}?article={i}&vote=up"
         feedback_down = f"{FEEDBACK_URL}?article={i}&vote=down"
+
         html += f"""
+        <div style='margin-bottom:30px;'>
+            <h3 style='color:#003366;'>{title}</h3>
+            <p>{content}</p>
+            <p><a href='{link}'>Read full story</a></p>
+            <p style='font-size:small;'>Was this summary helpful?</p>
             <p>
                 <a href='{feedback_up}'>👍</a>
                 <a href='{feedback_down}'>👎</a>
             </p>
-"""
+        </div>
+        """
 
     html += "<hr><p style='text-align:center; font-style:italic;'>Another day, another download of human happenings. Alden out. 🛰️</p></body></html>"
     return html
+
 
 if __name__ == "__main__":
     articles = get_all_titles()
@@ -173,4 +193,5 @@ if __name__ == "__main__":
 
     with open("daily_email_preview.html", "w", encoding="utf-8") as f:
         f.write(email_html)
-    print("HTML email content written to daily_email_preview.html")
+
+    print("✅ Email preview written to daily_email_preview.html")
