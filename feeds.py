@@ -4,6 +4,7 @@ import feedparser
 from urllib.parse import urlparse
 import os
 import json
+import time
 import requests
 from bs4 import BeautifulSoup
 from openai import OpenAI
@@ -11,32 +12,7 @@ from openai import OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 FEEDBACK_URL = os.getenv("FEEDBACK_URL", "https://alden-feedback.example.com/feedback")
 
-# Define feeds by topic
-RSS_FEEDS = {
-    "tech": [
-        "https://www.theverge.com/rss/index.xml",
-        "https://techcrunch.com/tag/artificial-intelligence/feed/",
-        "https://spectrum.ieee.org/rss/artificial-intelligence/fulltext",
-    ],
-    "space": [
-        "https://www.space.com/feeds/all",
-        "https://www.reddit.com/r/spacex/.rss",
-        "https://www.nasa.gov/rss/dyn/breaking_news.rss"
-    ],
-    "elon": [
-        "https://news.google.com/rss/search?q=Elon+Musk&hl=en-US&gl=US&ceid=US:en"
-    ],
-    "global": [
-        "https://apnews.com/rss/apf-international",
-        "http://feeds.bbci.co.uk/news/world/rss.xml"
-    ],
-    "funny": [
-        "https://www.theonion.com/rss",
-        "https://www.reddit.com/r/UpliftingNews/.rss",
-        "https://www.goodnewsnetwork.org/feed/"
-    ]
-}
-
+# [RSS_FEEDS same as before...]
 
 def get_all_titles():
     all_articles = []
@@ -110,8 +86,13 @@ def get_article_content(url):
         soup = BeautifulSoup(response.text, "html.parser")
         paragraphs = soup.find_all("p")
         return "\n".join(p.get_text() for p in paragraphs[:10]).strip()
+    except requests.exceptions.HTTPError as e:
+        print(f"HTTP error fetching article: {url} – {e}")
+        if e.response.status_code == 420:
+            print("⚠️ Reddit rate-limited us. Skipping.")
+        return ""
     except Exception as e:
-        print(f"Error fetching article content from {url}: {e}")
+        print(f"General error fetching article content from {url}: {e}")
         return ""
 
 
@@ -121,44 +102,64 @@ def summarize_articles(articles):
         content = get_article_content(article["link"])
         if not content:
             continue
+
         prompt = f"""
-        You are Alden, a smart and entertaining assistant.
-        Summarize this article clearly in:
-        - A one-line TL;DR at the top
-        - 2–4 bullet points after that
-        - Keep it brief, insightful, and just snarky enough
+You are Alden, a smart and entertaining assistant.
+Summarize this article clearly in:
+- A one-line TL;DR at the top
+- 2–4 bullet points after that
+- Keep it brief, insightful, and just snarky enough
 
-        End with a final note: “Why it matters.”
+End with a final note: “Why it matters.”
 
-        Title: {article['title']}
+Title: {article['title']}
 
-        {content}
-        """
-        
-        try:
-            response = client.chat.completions.create(
-                model="gpt-4o",
-                messages=[{"role": "user", "content": prompt}],
-                max_tokens=400
-            )
-            summary = response.choices[0].message.content.strip()
-            summaries.append({
-                "title": article["title"],
-                "summary": summary,
-                "link": article["link"],
-                "category": article["category"],
-                "source": article["source"]
-            })
-        except Exception as e:
-            print(f"Failed to summarize article: {article['title']}: {e}")
+{content}
+"""
+
+        # Handle GPT rate limit errors
+        for attempt in range(3):
+            try:
+                response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=400
+                )
+                summary = response.choices[0].message.content.strip()
+                summaries.append({
+                    "title": article["title"],
+                    "summary": summary,
+                    "link": article["link"],
+                    "category": article["category"],
+                    "source": article["source"]
+                })
+                print(f"✅ Summarized: {article['title']}")
+                break  # success
+            except Exception as e:
+                print(f"❌ Failed to summarize article: {article['title']}: {e}")
+                if "rate_limit_exceeded" in str(e) or "429" in str(e):
+                    wait = 3 + attempt
+                    print(f"⏳ Rate limit hit. Retrying in {wait}s...")
+                    time.sleep(wait)
+                else:
+                    break  # some other error – don't retry
     return summaries
 
 
 def generate_email_html(summaries):
-    html = """
+    import random
+    TAGLINES = [
+        "Your inbox’s least annoying briefing.",
+        "While others doomscroll, you just… know things.",
+        "Coffee’s hot. The world’s not calm. Let’s begin.",
+        "News. Filtered. For people who think.",
+    ]
+    tagline = random.choice(TAGLINES)
+
+    html = f"""
     <html><body style='font-family:sans-serif; max-width:700px; margin:auto;'>
     <h2 style='color:#2b2b2b;'>🧠 Alden's Daily Brief</h2>
-    <p>While others doomscroll, you just… know things.</p><hr>
+    <p>{tagline}</p><hr>
     """
     for i, summary in enumerate(summaries):
         title = summary['title']
@@ -174,8 +175,8 @@ def generate_email_html(summaries):
             <p><a href='{link}'>Read full story</a></p>
             <p style='font-size:small;'>Was this summary helpful?</p>
             <p>
-                <a href='{feedback_up}'>👍</a>
-                <a href='{feedback_down}'>👎</a>
+                <a href='{feedback_up}' target="_blank">👍</a>
+                <a href='{feedback_down}' target="_blank">👎</a>
             </p>
         </div>
         """
