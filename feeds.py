@@ -72,18 +72,20 @@ def choose_relevant_articles(titles, feedback, openai_api_key):
     headline_list = "\n".join([f"- {a['title']} (source: {a['source']})" for a in titles])
 
     prompt = f"""
-You are Alden, a personal assistant. Your job is to select 5–8 news headlines to summarize for a user who:
-1. Wants content relevant to their preferences.
-2. Also values new, diverse, or opposing perspectives to avoid echo chambers.
+You are Alden, a witty, insightful assistant who delivers a news briefing each day.
+Your goals:
+1. Prioritize stories aligned with the user's preferences.
+2. Include at least one surprising or diverse perspective to avoid echo chambers.
+3. Keep it fresh. Keep it sharp.
 
 User Preferences:
 Sources: {source_prefs}
 Keywords: {keyword_prefs}
 
-Here are today’s headlines:
+Today’s headlines:
 {headline_list}
 
-Return ONLY the exact headlines (no summaries, no commentary) that should be summarized today.
+Select 5–8 headlines to summarize. Return only the exact titles.
 """
     response = openai.ChatCompletion.create(
         model="gpt-4o",
@@ -113,7 +115,12 @@ def summarize_articles(articles, openai_api_key):
         if not content:
             continue
         prompt = f"""
-Summarize the following article in 3–5 bullet points with clear context and concise tone. Include why the article might matter to the reader at the end.
+You are Alden, a clever and concise assistant summarizing today’s news.
+Summarize the following article in 3–5 engaging bullet points that:
+- Clearly explain what’s happening
+- Add relevant context
+- Mention why this matters (especially to a curious, tech-minded reader)
+- Use a witty but respectful tone, not dry or robotic
 
 Title: {article['title']}
 
@@ -132,23 +139,43 @@ Title: {article['title']}
     return summaries
 
 def generate_email_html(summaries):
-    html = "<h2>Alden's Daily Brief</h2>"
+    html = """
+    <html>
+    <head>
+        <style>
+            body { font-family: 'Segoe UI', sans-serif; background: #f8f9fa; padding: 20px; color: #212529; }
+            .container { max-width: 800px; margin: auto; background: #fff; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.05); padding: 20px; }
+            h2 { text-align: center; color: #444; }
+            .story { border-bottom: 1px solid #e0e0e0; padding-bottom: 16px; margin-bottom: 16px; }
+            .story:last-child { border: none; }
+            .title { font-size: 18px; font-weight: bold; }
+            .summary { margin: 8px 0; line-height: 1.5; }
+            .feedback { font-size: 14px; }
+            .footer { text-align: center; margin-top: 30px; color: #888; font-size: 14px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h2>Alden's Daily Brief</h2>
+    """
     for i, summary in enumerate(summaries):
-        title = summary['title']
-        content = summary['summary'].replace('\n', '<br>')
-        link = summary['link']
         html += f"""
-        <div style='margin-bottom:20px;'>
-            <h3>{title}</h3>
-            <p>{content}</p>
-            <p><a href='{link}'>Read more</a></p>
-            <p>
-                <a href='https://example.com/feedback?article={i}&vote=up'>👍</a>
-                <a href='https://example.com/feedback?article={i}&vote=down'>👎</a>
-            </p>
-        </div>
+            <div class='story'>
+                <div class='title'>{summary['title']}</div>
+                <div class='summary'>{summary['summary'].replace('\n', '<br>')}</div>
+                <div><a href='{summary['link']}'>Read more</a></div>
+                <div class='feedback'>
+                    <a href='https://example.com/feedback?article={i}&vote=up'>👍</a>
+                    <a href='https://example.com/feedback?article={i}&vote=down'>👎</a>
+                </div>
+            </div>
         """
-    html += "<hr><p style='text-align:center;'>Brief delivered. Perspective gained. Your move, universe. </p>"
+    html += """
+            <div class='footer'>Brief delivered. Perspective gained. Your move, universe.</div>
+        </div>
+    </body>
+    </html>
+    """
     return html
 
 if __name__ == "__main__":
