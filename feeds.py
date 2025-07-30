@@ -90,7 +90,7 @@ Keywords: {keyword_prefs}
 Today's headlines:
 {headline_list}
 
-Pick 5–8 headlines for Alden to summarize. Choose based on relevance AND diversity. Return only the exact headlines. No commentary.
+Pick 5–8 headlines for Alden to summarize. Choose based on relevance AND diversity. Return only the exact URLs. No commentary.
 """
     response = client.chat.completions.create(
         model="gpt-4o",
