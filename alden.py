@@ -3,7 +3,7 @@ import os
 from dotenv import load_dotenv
 from email.mime.text import MIMEText
 import smtplib
-from alden import feeds  # Assuming feeds.py is in alden/
+import feeds
 
 load_dotenv()
 
