@@ -12,7 +12,31 @@ from openai import OpenAI
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 FEEDBACK_URL = os.getenv("FEEDBACK_URL", "https://alden-feedback.example.com/feedback")
 
-# [RSS_FEEDS same as before...]
+# Define feeds by topic
+RSS_FEEDS = {
+    "tech": [
+        "https://www.theverge.com/rss/index.xml",
+        "https://techcrunch.com/tag/artificial-intelligence/feed/",
+        "https://spectrum.ieee.org/rss/artificial-intelligence/fulltext",
+    ],
+    "space": [
+        "https://www.space.com/feeds/all",
+        "https://www.reddit.com/r/spacex/.rss",
+        "https://www.nasa.gov/rss/dyn/breaking_news.rss"
+    ],
+    "elon": [
+        "https://news.google.com/rss/search?q=Elon+Musk&hl=en-US&gl=US&ceid=US:en"
+    ],
+    "global": [
+        "https://apnews.com/rss/apf-international",
+        "http://feeds.bbci.co.uk/news/world/rss.xml"
+    ],
+    "funny": [
+        "https://www.theonion.com/rss",
+        "https://www.reddit.com/r/UpliftingNews/.rss",
+        "https://www.goodnewsnetwork.org/feed/"
+    ]
+}
 
 def get_all_titles():
     all_articles = []
