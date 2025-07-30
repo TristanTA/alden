@@ -188,14 +188,9 @@ if __name__ == "__main__":
     print(f"Loaded feedback with {len(feedback['sources'])} sources and {len(feedback['keywords'])} keywords.")
     selected_titles = choose_relevant_articles(articles, feedback)
     print(f"Selected {len(selected_titles)} articles for summarization.")
-    selected_articles = []
-    for a in articles:
-        for t in selected_titles:
-            if a["title"].strip().lower() == t.strip().lower():
-                selected_articles.append(a)
-                break
-    print(f"Found {len(selected_articles)} articles matching selected titles.")
-    summaries = summarize_articles(selected_articles)
+    selected_links = [a for a in articles if a["link"] in selected_titles]
+    print(f"Found {len(selected_l9nks)} articles matching selected titles.")
+    summaries = summarize_articles(selected_links)
     print(f"Generated {len(summaries)} summaries.")
     email_html = generate_email_html(summaries)
     print("Generated email HTML.")
