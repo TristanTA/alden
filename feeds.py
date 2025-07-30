@@ -9,6 +9,7 @@ from bs4 import BeautifulSoup
 from openai import OpenAI
 
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+FEEDBACK_URL = os.getenv("FEEDBACK_URL", "https://alden-feedback.example.com/feedback")
 
 # Define feeds by topic
 RSS_FEEDS = {
@@ -147,17 +148,15 @@ def generate_email_html(summaries):
         title = summary['title']
         content = summary['summary'].replace('\n', '<br>')
         link = summary['link']
+        feedback_up = f"{FEEDBACK_URL}?article={i}&vote=up"
+        feedback_down = f"{FEEDBACK_URL}?article={i}&vote=down"
         html += f"""
-        <div style='margin-bottom:30px;'>
-            <h3 style='color:#003366;'>{title}</h3>
-            <p>{content}</p>
-            <p><a href='{link}'>Read full story</a></p>
             <p>
-                <a href='https://example.com/feedback?article={i}&vote=up'>👍</a>
-                <a href='https://example.com/feedback?article={i}&vote=down'>👎</a>
+                <a href='{feedback_up}'>👍</a>
+                <a href='{feedback_down}'>👎</a>
             </p>
-        </div>
-        """
+"""
+
     html += "<hr><p style='text-align:center; font-style:italic;'>Another day, another download of human happenings. Alden out. 🛰️</p></body></html>"
     return html
 
