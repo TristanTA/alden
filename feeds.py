@@ -1,5 +1,3 @@
-# alden/feeds.py
-
 import feedparser
 from urllib.parse import urlparse
 import os
@@ -7,9 +5,7 @@ import json
 import time
 import requests
 from bs4 import BeautifulSoup
-from openai import OpenAI
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 FEEDBACK_URL = os.getenv("FEEDBACK_URL", "https://alden-feedback.example.com/feedback")
 
 # Define feeds by topic
@@ -37,6 +33,7 @@ RSS_FEEDS = {
         "https://www.goodnewsnetwork.org/feed/"
     ]
 }
+
 
 def get_all_titles():
     all_articles = []
@@ -68,6 +65,9 @@ def load_feedback(filepath="feedback.json"):
 
 
 def choose_relevant_articles(articles, feedback):
+    from openai import OpenAI
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
     source_weights = feedback.get("sources", {})
     keyword_weights = feedback.get("keywords", {})
 
@@ -121,6 +121,9 @@ def get_article_content(url):
 
 
 def summarize_articles(articles):
+    from openai import OpenAI
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
     summaries = []
     for article in articles:
         content = get_article_content(article["link"])
@@ -141,7 +144,6 @@ Title: {article['title']}
 {content}
 """
 
-        # Handle GPT rate limit errors
         for attempt in range(3):
             try:
                 response = client.chat.completions.create(
@@ -158,7 +160,7 @@ Title: {article['title']}
                     "source": article["source"]
                 })
                 print(f"✅ Summarized: {article['title']}")
-                break  # success
+                break
             except Exception as e:
                 print(f"❌ Failed to summarize article: {article['title']}: {e}")
                 if "rate_limit_exceeded" in str(e) or "429" in str(e):
@@ -166,7 +168,7 @@ Title: {article['title']}
                     print(f"⏳ Rate limit hit. Retrying in {wait}s...")
                     time.sleep(wait)
                 else:
-                    break  # some other error – don't retry
+                    break
     return summaries
 
 
@@ -207,28 +209,3 @@ def generate_email_html(summaries):
 
     html += "<hr><p style='text-align:center; font-style:italic;'>Another day, another download of human happenings. Alden out. 🛰️</p></body></html>"
     return html
-
-
-if __name__ == "__main__":
-    articles = get_all_titles()
-    print(f"Fetched {len(articles)} articles.")
-
-    feedback = load_feedback()
-    print(f"Loaded feedback with {len(feedback['sources'])} sources and {len(feedback['keywords'])} keywords.")
-
-    selected_links = choose_relevant_articles(articles, feedback)
-    print(f"Selected {len(selected_links)} article links for summarization.")
-
-    selected_articles = [a for a in articles if a["link"] in selected_links]
-    print(f"Matched {len(selected_articles)} articles by link.")
-
-    summaries = summarize_articles(selected_articles)
-    print(f"Generated {len(summaries)} summaries.")
-
-    email_html = generate_email_html(summaries)
-    print("Generated email HTML.")
-
-    with open("daily_email_preview.html", "w", encoding="utf-8") as f:
-        f.write(email_html)
-
-    print("✅ Email preview written to daily_email_preview.html")
