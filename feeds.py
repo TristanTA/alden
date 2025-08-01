@@ -6,7 +6,7 @@ import time
 import requests
 from bs4 import BeautifulSoup
 
-FEEDBACK_URL = os.getenv("FEEDBACK_URL", "https://alden-feedback.example.com/feedback")
+FEEDBACK_URL = os.getenv("FEEDBACK_URL", "https://alden-feedback.onrender.com/feedback")
 
 # Define feeds by topic
 RSS_FEEDS = {
@@ -74,7 +74,9 @@ def choose_relevant_articles(articles, feedback):
     source_prefs = ", ".join([f"{k}: {v}" for k, v in source_weights.items()])
     keyword_prefs = ", ".join([f"{k}: {v}" for k, v in keyword_weights.items()])
 
-    headline_list = "\n".join([f"- {a['title']} (source: {a['source']}) [link: {a['link']}]" for a in articles])
+    headline_list = "\n".join(
+        [f"- {a['title']} (source: {a['source']}) [link: {a['link']}]" for a in articles]
+    )
 
     prompt = f"""
 You are Alden, a savvy and slightly cheeky assistant who helps a human stay informed without drowning in noise.
