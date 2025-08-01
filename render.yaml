@@ -3,4 +3,4 @@ services:
     name: alden-feedback
     env: python
     buildCommand: ""
-    startCommand: python alden/feedback_server.py
+    startCommand: python feedback_server.py
