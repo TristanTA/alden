@@ -5,7 +5,7 @@ from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 import json
-from typing import Dict, Tuple
+from typing import Dict
 
 from core.audit import iter_log
 
@@ -29,20 +29,18 @@ def minutes_to_hhmm(minutes: int) -> str:
 
 def learn_preferences() -> Dict:
     """
-    Aggregate by (category, priority) if present in notes like "cat:<name>" or title prefix,
-    else by priority only. For simplicity, we’ll group by title keywords and priority
-    using outcomes that are 'done' or 'partial' (skip 'skipped').
+    Aggregate by rough priority inferred from title keywords.
+    Uses 'done' and 'partial' outcomes only.
 
-    Output schema:
+    Output:
     {
       "by_priority": {
          "high": {"preferred_start": "09:15"},
          "normal": {"preferred_start": "13:30"},
-         ...
+         "low": {"preferred_start": "16:00"}
       }
     }
     """
-    # Simple heuristic: collect successful (done/partial) planned_start times by priority keyword in title
     buckets = defaultdict(list)
 
     for rec in iter_log() or []:
@@ -54,7 +52,6 @@ def learn_preferences() -> Dict:
         if not start:
             continue
 
-        # detect rough priority from title keywords (fallback)
         if "deep work" in title or "focus" in title:
             pr = "high"
         elif "errand" in title or "light" in title:
