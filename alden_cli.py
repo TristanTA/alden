@@ -1,17 +1,4 @@
 # Minimal CLI to test Alden calendar + planner + brain
-#
-# Subcommands:
-#   add               → add an event
-#   list              → list all events
-#   today             → list today's events
-#   plan              → print today's plan (no write-back)
-#   plan-commit       → plan + apply reschedules (+ optional focus blocks)
-#   nudge-schedule    → print timestamped nudges for today's plan
-#   week              → print a multi-day weekly outline
-#   week-commit-anchors → create weekly anchor focus events per config
-#   done              → mark event done
-#   delete            → delete event
-#   update            → update event fields
 
 import argparse
 from planning.daily_planner import plan_day
@@ -25,6 +12,9 @@ from alden_calendar.calendar import (
 
 from core.writeback import apply_reschedules, materialize_focus_blocks, materialize_weekly_anchors
 from core.notifications import build_nudge_schedule
+from core.delivery import deliver_nudges
+from core.audit import log_block_outcome
+from learning.patterns import learn_preferences
 
 
 def cmd_add(args):
@@ -76,6 +66,14 @@ def cmd_nudge_schedule(_args):
     print("=== Nudge Schedule (timestamped) ===")
     for n in sched:
         print(f"{n['at']}  [{n['type']}]  {n['message']}")
+
+
+def cmd_send_nudges(_args):
+    """Build today's schedule and write to outbox (read-only delivery)."""
+    plan = plan_day(get_today_events())
+    sched = build_nudge_schedule(plan)
+    written = deliver_nudges(sched)
+    print(f"Outbox: wrote {written} nudge(s) to {CONFIG['delivery']['outbox_path']}")
 
 
 def cmd_plan_commit(args):
@@ -130,14 +128,6 @@ def cmd_week(args):
               f"focus:{summ['focus_minutes']}m  free:{summ['free_minutes']}m")
         for b in d["plan"]["blocks"]:
             print(f"  - {b['start']}–{b['end']}: {b['title']} [{b['priority']}] ({b['source']})")
-        if d.get("anchor_suggestions"):
-            print("  Anchors:")
-            for a in d["anchor_suggestions"]:
-                print(f"    • {a['start']}–{a['end']}: {a['title']} [{a.get('priority','normal')}]")
-    t = wk["totals"]
-    print("\nTotals:",
-          f"events:{t['events']}, high:{t['high']}, normal:{t['normal']}, low:{t['low']},",
-          f"scheduled:{t['scheduled_minutes']}m, focus:{t['focus_minutes']}m, free:{t['free_minutes']}m")
 
 
 def cmd_week_commit_anchors(args):
@@ -151,32 +141,25 @@ def cmd_week_commit_anchors(args):
         print("No anchors to create (check CONFIG.weekly_anchors).")
 
 
-def cmd_done(args):
-    updated = mark_done(args.id_or_title)
-    if updated:
-        print(f"Marked done: {updated.get('title')} (id={updated.get('id')})")
-    else:
-        print("No matching event found.")
+def cmd_audit_block(args):
+    """Log an outcome for a planned block."""
+    log_block_outcome(
+        date_iso=args.date,
+        title=args.title,
+        planned_start_hhmm=args.start,
+        planned_end_hhmm=args.end,
+        outcome=args.outcome,
+        actual_start_iso=args.actual_start,
+        actual_end_iso=args.actual_end,
+        notes=args.notes or ""
+    )
+    print("Recorded.")
 
 
-def cmd_delete(args):
-    ok = delete_event(args.id_or_title)
-    print("Deleted." if ok else "No matching event found.")
-
-
-def cmd_update(args):
-    fields = {
-        "title": args.title,
-        "time": args.time,
-        "priority": args.priority,
-        "category": args.category,
-        "duration_min": args.duration,
-    }
-    updated = update_event(args.id_or_title, **fields)
-    if updated:
-        print(f"Updated: {updated}")
-    else:
-        print("No matching event found.")
+def cmd_learn(_args):
+    prefs = learn_preferences()
+    print("Learned preferences:")
+    print(prefs)
 
 
 def main():
@@ -203,6 +186,9 @@ def main():
     sp = sub.add_parser("nudge-schedule", help="Build timestamped nudges for today's plan")
     sp.set_defaults(func=cmd_nudge_schedule)
 
+    sp = sub.add_parser("send-nudges", help="Write today's nudges to outbox (read-only delivery)")
+    sp.set_defaults(func=cmd_send_nudges)
+
     sp = sub.add_parser("plan-commit", help="Plan + commit reschedules (+ optional focus blocks)")
     sp.add_argument("--enable-writeback", action="store_true",
                     help="Apply reschedules even if config write_back.enabled is False.")
@@ -220,22 +206,19 @@ def main():
     sp.add_argument("--days", type=int, default=7, help="Number of days (default 7)")
     sp.set_defaults(func=cmd_week_commit_anchors)
 
-    sp = sub.add_parser("done", help="Mark an event done (by id or exact title)")
-    sp.add_argument("id_or_title")
-    sp.set_defaults(func=cmd_done)
+    sp = sub.add_parser("audit-block", help="Record outcome for a planned block")
+    sp.add_argument("--date", required=True, help="YYYY-MM-DD (day of the block)")
+    sp.add_argument("--title", required=True)
+    sp.add_argument("--start", required=True, help="HH:MM planned start")
+    sp.add_argument("--end", required=True, help="HH:MM planned end")
+    sp.add_argument("--outcome", required=True, choices=["done", "partial", "skipped"])
+    sp.add_argument("--actual-start", help="ISO timestamp when actually started (optional)")
+    sp.add_argument("--actual-end", help="ISO timestamp when actually ended (optional)")
+    sp.add_argument("--notes", help="Free text notes (optional)")
+    sp.set_defaults(func=cmd_audit_block)
 
-    sp = sub.add_parser("delete", help="Delete an event (by id or exact title)")
-    sp.add_argument("id_or_title")
-    sp.set_defaults(func=cmd_delete)
-
-    sp = sub.add_parser("update", help="Update an event (by id or exact title)")
-    sp.add_argument("id_or_title")
-    sp.add_argument("--title")
-    sp.add_argument("--time")
-    sp.add_argument("--priority", choices=["low", "normal", "high"])
-    sp.add_argument("--category")
-    sp.add_argument("--duration", type=int, help="Duration in minutes")
-    sp.set_defaults(func=cmd_update)
+    sp = sub.add_parser("learn-preferences", help="Learn preferred time windows from audit log")
+    sp.set_defaults(func=cmd_learn)
 
     args = p.parse_args()
     args.func(args)
