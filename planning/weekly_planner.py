@@ -1,31 +1,14 @@
-# Weekly planner skeleton.
+# Weekly planner (+ anchor suggestions).
 #
-# Builds a 7-day outline (configurable) by calling daily_planner.plan_day
-# for each date, then summarizes priorities and capacity.
-#
-# Output format:
-# {
-#   "days": [
-#       {
-#         "date": "2025-08-08",
-#         "plan": { blocks, nudges, reschedules, focus_blocks },
-#         "summary": {
-#            "events": N,
-#            "high": N, "normal": N, "low": N,
-#            "scheduled_minutes": M,
-#            "focus_minutes": M,
-#            "free_minutes": M
-#         }
-#       },
-#       ...
-#   ],
-#   "totals": { ... }   # weekly aggregates
-# }
+# Builds a 7-day outline by calling daily_planner.plan_day for each date,
+# summarizes priorities/capacity, and proposes anchor blocks per weekday
+# from CONFIG.weekly_anchors.
 
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from planning.daily_planner import plan_day
 from alden_calendar.calendar import list_events
+from utils.config import CONFIG
 
 
 def _to_date(d: Optional[str]) -> datetime:
@@ -59,10 +42,16 @@ def _priority_counts(blocks: List[Dict]) -> Dict[str, int]:
     return cnt
 
 
-def plan_week(start_date_iso: Optional=str, days: int = 7) -> Dict:
-    """Produce a week outline starting at start_date_iso (YYYY-MM-DD) or today."""
+def _weekday_anchor_templates(weekday: int) -> List[Dict]:
+    if not CONFIG.get("weekly_anchors", {}).get("enabled", True):
+        return []
+    mapping = CONFIG["weekly_anchors"].get("by_weekday", {})
+    return mapping.get(str(weekday), [])
+
+
+def plan_week(start_date_iso: Optional[str], days: int = 7) -> Dict:
     start_dt = _to_date(start_date_iso)
-    all_events = list_events()  # We'll filter by date per-day
+    all_events = list_events()
 
     days_out = []
     totals = {
@@ -85,10 +74,10 @@ def plan_week(start_date_iso: Optional=str, days: int = 7) -> Dict:
         pr_counts = _priority_counts([b for b in plan["blocks"] if b.get("source") == "event"])
         scheduled_min = _minutes(plan["blocks"], source_filter="event")
         focus_min = _minutes(plan["blocks"], source_filter="gap")
-
-        # 12h day capacity by default (match daily planner bounds)
-        total_day_capacity = 12 * 60
+        total_day_capacity = 12 * 60  # match daily planner bounds
         free_min = max(0, total_day_capacity - (scheduled_min + focus_min))
+
+        anchors = _weekday_anchor_templates(ref.weekday())
 
         summary = {
             "events": pr_counts["high"] + pr_counts["normal"] + pr_counts["low"],
@@ -101,10 +90,10 @@ def plan_week(start_date_iso: Optional=str, days: int = 7) -> Dict:
         days_out.append({
             "date": ref_date_str,
             "plan": plan,
-            "summary": summary
+            "summary": summary,
+            "anchor_suggestions": anchors
         })
 
-        # Aggregate totals
         totals["events"] += summary["events"]
         totals["high"] += summary["high"]
         totals["normal"] += summary["normal"]
