@@ -6,6 +6,7 @@
 #   today         → list today's events
 #   plan          → print today's plan (no write-back)
 #   plan-commit   → plan + apply reschedules (+ optional focus blocks)
+#   week          → print a multi-day weekly outline
 #   done          → mark event done
 #   delete        → delete event
 #   update        → update event fields
@@ -14,10 +15,11 @@
 #   python alden_cli.py add "Study Session" 2025-08-09T10:00 --priority high --duration 90
 #   python alden_cli.py plan
 #   python alden_cli.py plan-commit --enable-writeback --materialize-focus
-#   python alden_cli.py update "Study Session" --time 2025-08-09T11:00 --duration 45
+#   python alden_cli.py week --start 2025-08-11 --days 7
 
 import argparse
 from planning.daily_planner import plan_day
+from planning.weekly_planner import plan_week
 from utils.config import CONFIG
 
 # Adjust if you renamed your calendar package differently:
@@ -74,7 +76,6 @@ def cmd_plan(_args):
 
 
 def cmd_plan_commit(args):
-    """Generate today's plan and write it back based on flags/config."""
     plan = plan_day(get_today_events())
     _print_plan(plan)
 
@@ -107,6 +108,24 @@ def cmd_plan_commit(args):
             print("No focus blocks to create.")
 
     print("Write-back complete.")
+
+
+def cmd_week(args):
+    wk = plan_week(args.start, days=args.days)
+    print(f"=== Weekly Outline (start={args.start or 'today'}, days={args.days}) ===")
+    for d in wk["days"]:
+        date = d["date"]
+        summ = d["summary"]
+        print(f"\n{date}  —  events: {summ['events']}  "
+              f"(high:{summ['high']} normal:{summ['normal']} low:{summ['low']})  "
+              f"scheduled:{summ['scheduled_minutes']}m  "
+              f"focus:{summ['focus_minutes']}m  free:{summ['free_minutes']}m")
+        for b in d["plan"]["blocks"]:
+            print(f"  - {b['start']}–{b['end']}: {b['title']} [{b['priority']}] ({b['source']})")
+    t = wk["totals"]
+    print("\nTotals:",
+          f"events:{t['events']}, high:{t['high']}, normal:{t['normal']}, low:{t['low']},",
+          f"scheduled:{t['scheduled_minutes']}m, focus:{t['focus_minutes']}m, free:{t['free_minutes']}m")
 
 
 def cmd_done(args):
@@ -169,6 +188,12 @@ def main():
     sp.add_argument("--materialize-focus", action="store_true",
                     help="Create focus block events for gaps (overrides config for this run).")
     sp.set_defaults(func=cmd_plan_commit)
+
+    # week
+    sp = sub.add_parser("week", help="Generate a multi-day outline")
+    sp.add_argument("--start", help="YYYY-MM-DD (defaults to today)")
+    sp.add_argument("--days", type=int, default=7, help="Number of days (default 7)")
+    sp.set_defaults(func=cmd_week)
 
     # done
     sp = sub.add_parser("done", help="Mark an event done (by id or exact title)")
