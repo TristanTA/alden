@@ -1,18 +1,25 @@
 # alden.py
-
-import os
-from dotenv import load_dotenv
 from email.mime.text import MIMEText
 import smtplib
 import feeds
 
+from dotenv import load_dotenv
+import os, smtplib, ssl
+from email.mime.text import MIMEText
+
 load_dotenv()
 
-# Load secrets
-openai_key = os.getenv("OPENAI_API_KEY")
-email_user = os.getenv("EMAIL_USER")
-email_pass = os.getenv("EMAIL_PASS")
-email_to = os.getenv("EMAIL_TO")
+SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
+SMTP_PORT = int(os.getenv("SMTP_PORT", "465"))
+# Support both SMTP_* and EMAIL_* names
+email_user = os.getenv("SMTP_USER") or os.getenv("EMAIL_USER")
+email_pass = os.getenv("SMTP_PASS") or os.getenv("EMAIL_PASS")
+email_to   = os.getenv("TO_EMAIL")  or os.getenv("EMAIL_TO")
+email_from = os.getenv("FROM_EMAIL", email_user)
+
+assert email_user, "Missing SMTP_USER/EMAIL_USER"
+assert email_pass, "Missing SMTP_PASS/EMAIL_PASS"
+assert email_to,   "Missing TO_EMAIL/EMAIL_TO"
 
 # Step 1: Get all articles
 articles = feeds.get_all_titles()
@@ -39,12 +46,13 @@ print("📨 Generated email HTML.")
 
 # Step 6: Send email
 msg = MIMEText(html_content, "html")
-msg['Subject'] = "Your Daily Briefing – Alden"
-msg['From'] = email_user
-msg['To'] = email_to
+msg["Subject"] = "Your Daily Briefing – Alden"
+msg["From"] = email_from
+msg["To"] = email_to
 
-with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
+context = ssl.create_default_context()
+with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT, context=context) as server:
     server.login(email_user, email_pass)
-    server.sendmail(email_user, email_to, msg.as_string())
+    server.send_message(msg)
 
 print("✅ Alden has delivered your stylish summary.")
