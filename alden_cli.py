@@ -1,21 +1,32 @@
 # Minimal CLI to test Alden calendar + planner + brain
 #
+# Subcommands:
+#   add           → add an event
+#   list          → list all events
+#   today         → list today's events
+#   plan          → print today's plan (no write-back)
+#   plan-commit   → plan + apply reschedules (+ optional focus blocks)
+#   done          → mark event done
+#   delete        → delete event
+#   update        → update event fields
+#
 # Examples:
 #   python alden_cli.py add "Study Session" 2025-08-09T10:00 --priority high --duration 90
-#   python alden_cli.py list
-#   python alden_cli.py today
 #   python alden_cli.py plan
-#   python alden_cli.py done "Study Session"
-#   python alden_cli.py delete "Study Session"
+#   python alden_cli.py plan-commit --enable-writeback --materialize-focus
 #   python alden_cli.py update "Study Session" --time 2025-08-09T11:00 --duration 45
 
 import argparse
 from planning.daily_planner import plan_day
+from utils.config import CONFIG
 
-# If you renamed your calendar package, keep this aligned:
+# Adjust if you renamed your calendar package differently:
 from alden_calendar.calendar import (
     add_event, list_events, get_today_events, delete_event, mark_done, update_event
 )
+
+# Write-back helpers:
+from core.writeback import apply_reschedules, materialize_focus_blocks
 
 
 def cmd_add(args):
@@ -44,8 +55,7 @@ def cmd_today(_args):
               f"({e.get('status')}) id={e.get('id')}")
 
 
-def cmd_plan(_args):
-    plan = plan_day(get_today_events())
+def _print_plan(plan: dict):
     print("=== Plan ===")
     for b in plan["blocks"]:
         print(f"- {b['start']}–{b['end']}: {b['title']} [{b['priority']}] ({b['source']})")
@@ -53,6 +63,50 @@ def cmd_plan(_args):
         print("Nudges:")
         for n in plan["nudges"]:
             print(f"- {n}")
+    # Show prospective write-back counts
+    print(f"\n[Info] Reschedules suggested: {len(plan.get('reschedules', []))}")
+    print(f"[Info] Focus gaps detected:  {len(plan.get('focus_blocks', []))}")
+
+
+def cmd_plan(_args):
+    plan = plan_day(get_today_events())
+    _print_plan(plan)
+
+
+def cmd_plan_commit(args):
+    """Generate today's plan and write it back based on flags/config."""
+    plan = plan_day(get_today_events())
+    _print_plan(plan)
+
+    # Determine effective write-back settings (CLI flags override config)
+    wb_cfg = CONFIG.get("write_back", {})
+    do_resched = args.enable_writeback or wb_cfg.get("enabled", False)
+    do_focus   = args.materialize_focus or (wb_cfg.get("enabled", False) and wb_cfg.get("materialize_focus_blocks", False))
+
+    print("\n=== Write-back ===")
+    if not (do_resched or do_focus):
+        print("Write-back is disabled (enable with --enable-writeback and/or --materialize-focus).")
+        return
+
+    if do_resched:
+        msgs = apply_reschedules(plan.get("reschedules", []))
+        if msgs:
+            print("Reschedules applied:")
+            for m in msgs:
+                print(f"- {m}")
+        else:
+            print("No reschedules to apply.")
+
+    if do_focus:
+        msgs = materialize_focus_blocks(plan.get("focus_blocks", []))
+        if msgs:
+            print("Focus blocks created:")
+            for m in msgs:
+                print(f"- {m}")
+        else:
+            print("No focus blocks to create.")
+
+    print("Write-back complete.")
 
 
 def cmd_done(args):
@@ -104,9 +158,17 @@ def main():
     sp = sub.add_parser("today", help="List today's events")
     sp.set_defaults(func=cmd_today)
 
-    # plan
-    sp = sub.add_parser("plan", help="Generate today's plan")
+    # plan (no write-back)
+    sp = sub.add_parser("plan", help="Generate today's plan (no write-back)")
     sp.set_defaults(func=cmd_plan)
+
+    # plan-commit (write-back path)
+    sp = sub.add_parser("plan-commit", help="Plan + commit reschedules (+ optional focus blocks)")
+    sp.add_argument("--enable-writeback", action="store_true",
+                    help="Apply reschedules even if config write_back.enabled is False.")
+    sp.add_argument("--materialize-focus", action="store_true",
+                    help="Create focus block events for gaps (overrides config for this run).")
+    sp.set_defaults(func=cmd_plan_commit)
 
     # done
     sp = sub.add_parser("done", help="Mark an event done (by id or exact title)")
