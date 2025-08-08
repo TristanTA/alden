@@ -12,7 +12,7 @@
 #   - Emits nudges describing any reschedules.
 #   - Also returns metadata so the brain can WRITE BACK changes:
 #       reschedules: [{"id","title","old_start","new_start","duration_min"}]
-#       focus_blocks: [{"start","end"}]   # HH:MM strings (today)
+#       focus_blocks: [{"start","end"}]   # HH:MM strings (based on ref day)
 #
 # Output:
 #   {
@@ -23,7 +23,7 @@
 #   }
 
 from datetime import datetime, timedelta
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Optional
 
 
 WORK_START = (8, 0)   # 08:00
@@ -36,7 +36,7 @@ def _priority_weight(p: str) -> int:
     return order.get((p or "normal").lower(), 1)
 
 
-def _parse_time(iso_str: str) -> datetime | None:
+def _parse_time(iso_str: str) -> Optional[datetime]:
     try:
         return datetime.fromisoformat(iso_str)
     except Exception:
@@ -55,17 +55,21 @@ def _fmt_hhmm(dt: datetime) -> str:
     return dt.strftime("%H:%M")
 
 
-def _work_bounds(now: datetime) -> Tuple[datetime, datetime]:
-    start = now.replace(hour=WORK_START[0], minute=WORK_START[1], second=0, microsecond=0)
-    end   = now.replace(hour=WORK_END[0],   minute=WORK_END[1],   second=0, microsecond=0)
+def _work_bounds(day: datetime) -> Tuple[datetime, datetime]:
+    start = day.replace(hour=WORK_START[0], minute=WORK_START[1], second=0, microsecond=0)
+    end   = day.replace(hour=WORK_END[0],   minute=WORK_END[1],   second=0, microsecond=0)
     return start, end
 
 
-def plan_day(events: List[Dict]) -> Dict:
-    now = datetime.now()
+def plan_day(events: List[Dict], ref_date: Optional[datetime] = None) -> Dict:
+    """
+    Plan a single day. By default uses 'today'; pass ref_date to plan other days.
+    ref_date's date() is used for filtering and work bounds.
+    """
+    now = ref_date or datetime.now()
     day_start, day_end = _work_bounds(now)
 
-    # Filter to today's events, parse times, attach metadata
+    # Filter to ref_date's events, parse times, attach metadata
     todays = []
     for e in events:
         t = _parse_time(e.get("time", ""))
@@ -99,7 +103,7 @@ def plan_day(events: List[Dict]) -> Dict:
 
         # Overlap detected. Decide which event stays.
         if e["_pwt"] < last["_pwt"]:
-            # New event has higher priority → keep e; shift last forward
+            # New event higher priority → shift last forward
             old_start = last["_start"]
             moved = dict(last)
             moved["_start"] = max(e["_end"], moved["_start"])
@@ -118,7 +122,7 @@ def plan_day(events: List[Dict]) -> Dict:
                 f"due to conflict with high-priority **{e.get('title','(untitled)')}**."
             )
         else:
-            # Existing last has higher (or equal) priority → shift e after last
+            # Existing last higher or equal priority → shift e after last
             old_start = e["_start"]
             moved = dict(e)
             moved["_start"] = last["_end"]
@@ -153,11 +157,7 @@ def plan_day(events: List[Dict]) -> Dict:
                 "priority": default_priority,
                 "source": "gap"
             })
-            # record for possible write-back
-            focus_blocks.append({
-                "start": _fmt_hhmm(cursor),
-                "end": _fmt_hhmm(until)
-            })
+            focus_blocks.append({"start": _fmt_hhmm(cursor), "end": _fmt_hhmm(until)})
         cursor = until
 
     for e in scheduled:
@@ -189,10 +189,7 @@ def plan_day(events: List[Dict]) -> Dict:
                 "priority": "low",
                 "source": "gap"
             })
-            focus_blocks.append({
-                "start": _fmt_hhmm(cursor),
-                "end": _fmt_hhmm(day_end)
-            })
+            focus_blocks.append({"start": _fmt_hhmm(cursor), "end": _fmt_hhmm(day_end)})
 
     # No events at all: default structure (no write-back metadata for these)
     if not scheduled:
@@ -202,7 +199,7 @@ def plan_day(events: List[Dict]) -> Dict:
             {"start": "13:00", "end": "15:00", "title": "Project Block", "priority": "normal", "source": "gap"},
             {"start": "15:30", "end": "17:00", "title": "Light Tasks", "priority": "low", "source": "gap"},
         ]
-        nudges.append("No events today—proposed a focus-first schedule.")
+        nudges.append("No events this day—proposed a focus-first schedule.")
         focus_blocks = []
         reschedules = []
 
