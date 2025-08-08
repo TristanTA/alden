@@ -16,15 +16,20 @@ CONFIG = {
     # Notifications: convert plan into timestamped nudges (no delivery here)
     "notifications": {
         "enabled": True,
-        # Which types to schedule
         "types": {
             "prep": True,
             "mid_gap_check": True,
             "wrap": True,
             "day_wrap": True
         },
-        # Default workday bounds for schedule calculations (HH:MM, 24h)
         "workday": {"start": "08:00", "end": "20:00"}
+    },
+
+    # Delivery (read-only outbox for now)
+    "delivery": {
+        "enabled": True,
+        "console_echo": True,                  # print to stdout too
+        "outbox_path": "outbox/nudges.jsonl"   # appended JSON Lines file
     },
 
     # Budgeting (wire to LLM calls later)
@@ -35,19 +40,12 @@ CONFIG = {
 
     # --- Write-back controls ---
     "write_back": {
-        # If True, Alden will write changes to the calendar:
-        # - apply reschedules determined by the planner
-        # - optionally create focus block events for gaps
         "enabled": False,
-
-        # Only materialize focus gaps if this is True:
         "materialize_focus_blocks": False,
-
-        # Title and defaults for focus blocks Alden creates:
         "focus_block": {
             "title": "Focus Block",
             "category": "focus",
-            "priority": "normal",  # low | normal | high
+            "priority": "normal",
             "duration_min_default": 60
         }
     },
@@ -62,7 +60,6 @@ CONFIG = {
             "2": [{"title": "Deep Work", "start": "09:00", "end": "11:00", "priority": "high"}],
             "3": [{"title": "Deep Work", "start": "09:00", "end": "11:00", "priority": "high"}],
             "4": [{"title": "Deep Work", "start": "09:00", "end": "11:00", "priority": "high"}]
-            # Add weekends if you want anchors there too
         },
         "default_category": "focus",
         "default_duration_min": 60
