@@ -1,14 +1,4 @@
 {
-  "sources": {
-    "www.theverge.com": 1
-  },
-  "keywords": {
-    "youtube": 1,
-    "tells": 1,
-    "creators": 1,
-    "they": 1,
-    "drop": 1,
-    "more": 1,
-    "f-bombs": 1
-  }
+  "sources": {},
+  "keywords": {}
 }
