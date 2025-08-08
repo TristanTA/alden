@@ -1,21 +1,17 @@
 # Minimal CLI to test Alden calendar + planner + brain
 #
 # Subcommands:
-#   add           → add an event
-#   list          → list all events
-#   today         → list today's events
-#   plan          → print today's plan (no write-back)
-#   plan-commit   → plan + apply reschedules (+ optional focus blocks)
-#   week          → print a multi-day weekly outline
-#   done          → mark event done
-#   delete        → delete event
-#   update        → update event fields
-#
-# Examples:
-#   python alden_cli.py add "Study Session" 2025-08-09T10:00 --priority high --duration 90
-#   python alden_cli.py plan
-#   python alden_cli.py plan-commit --enable-writeback --materialize-focus
-#   python alden_cli.py week --start 2025-08-11 --days 7
+#   add               → add an event
+#   list              → list all events
+#   today             → list today's events
+#   plan              → print today's plan (no write-back)
+#   plan-commit       → plan + apply reschedules (+ optional focus blocks)
+#   nudge-schedule    → print timestamped nudges for today's plan
+#   week              → print a multi-day weekly outline
+#   week-commit-anchors → create weekly anchor focus events per config
+#   done              → mark event done
+#   delete            → delete event
+#   update            → update event fields
 
 import argparse
 from planning.daily_planner import plan_day
@@ -27,8 +23,8 @@ from alden_calendar.calendar import (
     add_event, list_events, get_today_events, delete_event, mark_done, update_event
 )
 
-# Write-back helpers:
-from core.writeback import apply_reschedules, materialize_focus_blocks
+from core.writeback import apply_reschedules, materialize_focus_blocks, materialize_weekly_anchors
+from core.notifications import build_nudge_schedule
 
 
 def cmd_add(args):
@@ -65,7 +61,6 @@ def _print_plan(plan: dict):
         print("Nudges:")
         for n in plan["nudges"]:
             print(f"- {n}")
-    # Show prospective write-back counts
     print(f"\n[Info] Reschedules suggested: {len(plan.get('reschedules', []))}")
     print(f"[Info] Focus gaps detected:  {len(plan.get('focus_blocks', []))}")
 
@@ -75,14 +70,24 @@ def cmd_plan(_args):
     _print_plan(plan)
 
 
+def cmd_nudge_schedule(_args):
+    plan = plan_day(get_today_events())
+    sched = build_nudge_schedule(plan)
+    print("=== Nudge Schedule (timestamped) ===")
+    for n in sched:
+        print(f"{n['at']}  [{n['type']}]  {n['message']}")
+
+
 def cmd_plan_commit(args):
     plan = plan_day(get_today_events())
     _print_plan(plan)
 
-    # Determine effective write-back settings (CLI flags override config)
     wb_cfg = CONFIG.get("write_back", {})
     do_resched = args.enable_writeback or wb_cfg.get("enabled", False)
     do_focus   = args.materialize_focus or (wb_cfg.get("enabled", False) and wb_cfg.get("materialize_focus_blocks", False))
+
+    resched_count = 0
+    focus_count = 0
 
     print("\n=== Write-back ===")
     if not (do_resched or do_focus):
@@ -91,6 +96,7 @@ def cmd_plan_commit(args):
 
     if do_resched:
         msgs = apply_reschedules(plan.get("reschedules", []))
+        resched_count = len(msgs)
         if msgs:
             print("Reschedules applied:")
             for m in msgs:
@@ -100,6 +106,7 @@ def cmd_plan_commit(args):
 
     if do_focus:
         msgs = materialize_focus_blocks(plan.get("focus_blocks", []))
+        focus_count = len(msgs)
         if msgs:
             print("Focus blocks created:")
             for m in msgs:
@@ -107,6 +114,7 @@ def cmd_plan_commit(args):
         else:
             print("No focus blocks to create.")
 
+    print(f"\n[Summary] {resched_count} events rescheduled, {focus_count} focus blocks created.")
     print("Write-back complete.")
 
 
@@ -122,10 +130,25 @@ def cmd_week(args):
               f"focus:{summ['focus_minutes']}m  free:{summ['free_minutes']}m")
         for b in d["plan"]["blocks"]:
             print(f"  - {b['start']}–{b['end']}: {b['title']} [{b['priority']}] ({b['source']})")
+        if d.get("anchor_suggestions"):
+            print("  Anchors:")
+            for a in d["anchor_suggestions"]:
+                print(f"    • {a['start']}–{a['end']}: {a['title']} [{a.get('priority','normal')}]")
     t = wk["totals"]
     print("\nTotals:",
           f"events:{t['events']}, high:{t['high']}, normal:{t['normal']}, low:{t['low']},",
           f"scheduled:{t['scheduled_minutes']}m, focus:{t['focus_minutes']}m, free:{t['free_minutes']}m")
+
+
+def cmd_week_commit_anchors(args):
+    wk = plan_week(args.start, days=args.days)
+    msgs = materialize_weekly_anchors(wk)
+    if msgs:
+        print("Anchors created:")
+        for m in msgs:
+            print(f"- {m}")
+    else:
+        print("No anchors to create (check CONFIG.weekly_anchors).")
 
 
 def cmd_done(args):
@@ -160,7 +183,6 @@ def main():
     p = argparse.ArgumentParser(description="Alden CLI")
     sub = p.add_subparsers(required=True)
 
-    # add
     sp = sub.add_parser("add", help="Add an event")
     sp.add_argument("title")
     sp.add_argument("time", help="ISO time, e.g., 2025-08-09T10:00")
@@ -169,19 +191,18 @@ def main():
     sp.add_argument("--duration", type=int, default=60, help="Duration in minutes")
     sp.set_defaults(func=cmd_add)
 
-    # list
     sp = sub.add_parser("list", help="List all events")
     sp.set_defaults(func=cmd_list)
 
-    # today
     sp = sub.add_parser("today", help="List today's events")
     sp.set_defaults(func=cmd_today)
 
-    # plan (no write-back)
     sp = sub.add_parser("plan", help="Generate today's plan (no write-back)")
     sp.set_defaults(func=cmd_plan)
 
-    # plan-commit (write-back path)
+    sp = sub.add_parser("nudge-schedule", help="Build timestamped nudges for today's plan")
+    sp.set_defaults(func=cmd_nudge_schedule)
+
     sp = sub.add_parser("plan-commit", help="Plan + commit reschedules (+ optional focus blocks)")
     sp.add_argument("--enable-writeback", action="store_true",
                     help="Apply reschedules even if config write_back.enabled is False.")
@@ -189,23 +210,24 @@ def main():
                     help="Create focus block events for gaps (overrides config for this run).")
     sp.set_defaults(func=cmd_plan_commit)
 
-    # week
     sp = sub.add_parser("week", help="Generate a multi-day outline")
     sp.add_argument("--start", help="YYYY-MM-DD (defaults to today)")
     sp.add_argument("--days", type=int, default=7, help="Number of days (default 7)")
     sp.set_defaults(func=cmd_week)
 
-    # done
+    sp = sub.add_parser("week-commit-anchors", help="Create weekly anchor events based on config")
+    sp.add_argument("--start", help="YYYY-MM-DD (defaults to today)")
+    sp.add_argument("--days", type=int, default=7, help="Number of days (default 7)")
+    sp.set_defaults(func=cmd_week_commit_anchors)
+
     sp = sub.add_parser("done", help="Mark an event done (by id or exact title)")
     sp.add_argument("id_or_title")
     sp.set_defaults(func=cmd_done)
 
-    # delete
     sp = sub.add_parser("delete", help="Delete an event (by id or exact title)")
     sp.add_argument("id_or_title")
     sp.set_defaults(func=cmd_delete)
 
-    # update
     sp = sub.add_parser("update", help="Update an event (by id or exact title)")
     sp.add_argument("id_or_title")
     sp.add_argument("--title")
