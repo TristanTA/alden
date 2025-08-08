@@ -23,7 +23,6 @@ def write_nudges_jsonl(nudges: List[Dict], out_path: str | Path = None) -> int:
     count = 0
     with p.open("a", encoding="utf-8") as f:
         for n in nudges:
-            # Normalize record
             rec = {
                 "at": n.get("at"),                         # ISO minute timestamp
                 "type": n.get("type"),                     # prep|mid|wrap|day_wrap
