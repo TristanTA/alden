@@ -1,4 +1,4 @@
-# Local-only calendar system
+# Local-only calendar system (with duration support)
 
 import json
 import uuid
@@ -6,7 +6,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
 
-CALENDAR_FILE = Path("calendar/calendar_db.json")
+CALENDAR_FILE = Path("alden_calendar/calendar_db.json")
 
 
 def load_calendar() -> List[Dict]:
@@ -21,16 +21,23 @@ def save_calendar(events: List[Dict]) -> None:
         json.dump(events, f, indent=2, ensure_ascii=False)
 
 
-def add_event(title: str, time_str: str, category: str = "general",
-              priority: str = "normal") -> Dict:
+def add_event(
+    title: str,
+    time_str: str,
+    category: str = "general",
+    priority: str = "normal",
+    duration_min: int = 60,
+) -> Dict:
+    """Create a new event. time_str must be ISO-like (YYYY-MM-DDTHH:MM)."""
     events = load_calendar()
     ev = {
         "id": str(uuid.uuid4()),
         "title": title,
-        "time": time_str,            # ISO 8601 string
+        "time": time_str,             # ISO 8601 string
         "category": category,
-        "priority": priority,
-        "status": "scheduled",       # scheduled | done | canceled
+        "priority": priority,         # low | normal | high
+        "duration_min": int(duration_min),
+        "status": "scheduled",        # scheduled | done | canceled
         "created": datetime.now().isoformat()
     }
     events.append(ev)
@@ -79,11 +86,17 @@ def delete_event(id_or_title: str) -> bool:
 
 
 def update_event(id_or_title: str, **fields) -> Optional[Dict]:
+    """Update fields (title, time, category, priority, status, duration_min)."""
     events = load_calendar()
     updated = None
     for e in events:
         if _match_id_or_title(e, id_or_title):
-            e.update(fields)
+            if "duration_min" in fields and fields["duration_min"] is not None:
+                try:
+                    fields["duration_min"] = int(fields["duration_min"])
+                except Exception:
+                    pass
+            e.update({k: v for k, v in fields.items() if v is not None})
             updated = e
             break
     if updated:
