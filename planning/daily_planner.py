@@ -1,4 +1,4 @@
-# Daily planner with durations and overlap handling.
+# Daily planner with durations and overlap handling + write-back metadata.
 #
 # Inputs: list of events with keys:
 #   id, title, time (ISO), category, priority (low|normal|high), duration_min, status
@@ -10,11 +10,16 @@
 #   - Resolves overlaps by keeping higher-priority in place and shifting lower-priority
 #     to start after the higher-priority event ends.
 #   - Emits nudges describing any reschedules.
+#   - Also returns metadata so the brain can WRITE BACK changes:
+#       reschedules: [{"id","title","old_start","new_start","duration_min"}]
+#       focus_blocks: [{"start","end"}]   # HH:MM strings (today)
 #
 # Output:
 #   {
 #     "blocks": [{start, end, title, priority, source, event_id?}, ...],
-#     "nudges": [str, ...]
+#     "nudges": [str, ...],
+#     "reschedules": [ ... ],
+#     "focus_blocks": [ ... ]
 #   }
 
 from datetime import datetime, timedelta
@@ -78,10 +83,9 @@ def plan_day(events: List[Dict]) -> Dict:
 
     blocks: List[Dict] = []
     nudges: List[str] = []
+    reschedules: List[Dict] = []
 
     # De-conflict overlaps:
-    # Keep a rolling "schedule" list; when a new event overlaps with the last scheduled,
-    # compare priority. Lower priority gets shifted to start at last end.
     scheduled: List[Dict] = []
     for e in todays:
         if not scheduled:
@@ -90,39 +94,54 @@ def plan_day(events: List[Dict]) -> Dict:
 
         last = scheduled[-1]
         if e["_start"] >= last["_end"]:
-            # no overlap
             scheduled.append(e)
             continue
 
         # Overlap detected. Decide which event stays.
         if e["_pwt"] < last["_pwt"]:
-            # New event has higher priority → keep e in place; shift last forward
-            shift_start = e["_end"]
+            # New event has higher priority → keep e; shift last forward
+            old_start = last["_start"]
             moved = dict(last)
-            moved["_start"] = max(shift_start, moved["_start"])
+            moved["_start"] = max(e["_end"], moved["_start"])
             moved["_end"] = moved["_start"] + timedelta(minutes=moved["_dur"])
-            scheduled[-1] = e   # e takes the current slot
+            scheduled[-1] = e
             scheduled.append(moved)
+            reschedules.append({
+                "id": last.get("id"),
+                "title": last.get("title", "(untitled)"),
+                "old_start": old_start.isoformat(timespec="minutes"),
+                "new_start": moved["_start"].isoformat(timespec="minutes"),
+                "duration_min": moved["_dur"]
+            })
             nudges.append(
                 f"Rescheduled **{last.get('title','(untitled)')}** to {_fmt_hhmm(moved['_start'])} "
                 f"due to conflict with high-priority **{e.get('title','(untitled)')}**."
             )
         else:
             # Existing last has higher (or equal) priority → shift e after last
+            old_start = e["_start"]
             moved = dict(e)
             moved["_start"] = last["_end"]
             moved["_end"] = moved["_start"] + timedelta(minutes=moved["_dur"])
             scheduled.append(moved)
+            reschedules.append({
+                "id": e.get("id"),
+                "title": e.get("title", "(untitled)"),
+                "old_start": old_start.isoformat(timespec="minutes"),
+                "new_start": moved["_start"].isoformat(timespec="minutes"),
+                "duration_min": moved["_dur"]
+            })
             nudges.append(
                 f"Rescheduled **{e.get('title','(untitled)')}** to {_fmt_hhmm(moved['_start'])} "
                 f"due to conflict with **{last.get('title','(untitled)')}**."
             )
 
-    # Build plan blocks with "gap" focus blocks
+    # Build plan blocks; also collect focus gaps for optional write-back
     cursor = day_start
+    focus_blocks: List[Dict] = []
 
     def _add_gap(until: datetime, default_priority="normal"):
-        nonlocal blocks, cursor
+        nonlocal blocks, cursor, focus_blocks
         if until <= cursor:
             return
         gap_len = int((until - cursor).total_seconds() // 60)
@@ -134,16 +153,20 @@ def plan_day(events: List[Dict]) -> Dict:
                 "priority": default_priority,
                 "source": "gap"
             })
+            # record for possible write-back
+            focus_blocks.append({
+                "start": _fmt_hhmm(cursor),
+                "end": _fmt_hhmm(until)
+            })
         cursor = until
 
     for e in scheduled:
         evt_start = max(e["_start"], day_start)
         evt_end = min(e["_end"], day_end)
 
-        # Pre-event gap
         _add_gap(evt_start)
 
-        # Add event block (skip if outside work window)
+        # Add event block
         if evt_end > evt_start:
             blocks.append({
                 "start": _fmt_hhmm(evt_start),
@@ -166,8 +189,12 @@ def plan_day(events: List[Dict]) -> Dict:
                 "priority": "low",
                 "source": "gap"
             })
+            focus_blocks.append({
+                "start": _fmt_hhmm(cursor),
+                "end": _fmt_hhmm(day_end)
+            })
 
-    # No events at all: provide a default structure
+    # No events at all: default structure (no write-back metadata for these)
     if not scheduled:
         blocks = [
             {"start": "09:00", "end": "11:00", "title": "Deep Work", "priority": "high", "source": "gap"},
@@ -176,5 +203,12 @@ def plan_day(events: List[Dict]) -> Dict:
             {"start": "15:30", "end": "17:00", "title": "Light Tasks", "priority": "low", "source": "gap"},
         ]
         nudges.append("No events today—proposed a focus-first schedule.")
+        focus_blocks = []
+        reschedules = []
 
-    return {"blocks": blocks, "nudges": nudges}
+    return {
+        "blocks": blocks,
+        "nudges": nudges,
+        "reschedules": reschedules,
+        "focus_blocks": focus_blocks
+    }
