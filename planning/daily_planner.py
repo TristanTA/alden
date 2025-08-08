@@ -1,113 +1,174 @@
-# Daily planner (lightweight / heuristic)
+# Daily planner with durations and overlap handling.
 #
-# Input: list of events (dicts) with keys:
-#   id, title, time (ISO), category, priority, status
-# Output: plan dict:
+# Inputs: list of events with keys:
+#   id, title, time (ISO), category, priority (low|normal|high), duration_min, status
+#
+# Behavior:
+#   - Parses event start times
+#   - Uses duration_min (default 60 if missing/invalid)
+#   - Sorts by start time, then priority (high > normal > low)
+#   - Resolves overlaps by keeping higher-priority in place and shifting lower-priority
+#     to start after the higher-priority event ends.
+#   - Emits nudges describing any reschedules.
+#
+# Output:
 #   {
-#     "blocks": [{start, end, title, priority, source}],   # source: "event"|"gap"
+#     "blocks": [{start, end, title, priority, source, event_id?}, ...],
 #     "nudges": [str, ...]
 #   }
 
 from datetime import datetime, timedelta
+from typing import List, Dict, Tuple
 
 
-def _priority_weight(p):
+WORK_START = (8, 0)   # 08:00
+WORK_END   = (20, 0)  # 20:00
+MIN_GAP_BLOCK_MIN = 30
+
+
+def _priority_weight(p: str) -> int:
     order = {"high": 0, "normal": 1, "low": 2}
-    return order.get(p or "normal", 1)
+    return order.get((p or "normal").lower(), 1)
 
 
-def _parse_time(iso_str):
-    # Accepts "YYYY-MM-DDTHH:MM" or full ISO
+def _parse_time(iso_str: str) -> datetime | None:
     try:
         return datetime.fromisoformat(iso_str)
     except Exception:
-        # fallback: ignore parse errors by returning None
         return None
 
 
-def _event_duration_minutes(ev):
-    # Simple default: 60 minutes if not encoded in title (we can expand later)
-    return 60
+def _get_duration(e: Dict) -> int:
+    try:
+        d = int(e.get("duration_min", 60))
+        return max(5, min(d, 12 * 60))  # clamp: 5 min to 12 hours
+    except Exception:
+        return 60
 
 
-def plan_day(events):
+def _fmt_hhmm(dt: datetime) -> str:
+    return dt.strftime("%H:%M")
+
+
+def _work_bounds(now: datetime) -> Tuple[datetime, datetime]:
+    start = now.replace(hour=WORK_START[0], minute=WORK_START[1], second=0, microsecond=0)
+    end   = now.replace(hour=WORK_END[0],   minute=WORK_END[1],   second=0, microsecond=0)
+    return start, end
+
+
+def plan_day(events: List[Dict]) -> Dict:
     now = datetime.now()
-    start_of_day = now.replace(hour=8, minute=0, second=0, microsecond=0)
-    end_of_day = now.replace(hour=20, minute=0, second=0, microsecond=0)
+    day_start, day_end = _work_bounds(now)
 
-    # Filter to today + parse times
+    # Filter to today's events, parse times, attach metadata
     todays = []
     for e in events:
         t = _parse_time(e.get("time", ""))
-        if not t:
+        if not t or t.date() != now.date():
             continue
-        if t.date() == now.date():
-            e["_dt"] = t
-            todays.append(e)
+        e = dict(e)  # shallow copy
+        e["_start"] = t
+        e["_dur"] = _get_duration(e)
+        e["_end"] = t + timedelta(minutes=e["_dur"])
+        e["_pwt"] = _priority_weight(e.get("priority"))
+        todays.append(e)
 
-    # Sort by (time, priority)
-    todays.sort(key=lambda e: (e["_dt"], _priority_weight(e.get("priority"))))
+    # Sort by (start time, priority weight)
+    todays.sort(key=lambda e: (e["_start"], e["_pwt"]))
 
-    # Build blocks from events (assume 60min default)
-    blocks = []
-    cursor = start_of_day
-    nudges = []
+    blocks: List[Dict] = []
+    nudges: List[str] = []
 
+    # De-conflict overlaps:
+    # Keep a rolling "schedule" list; when a new event overlaps with the last scheduled,
+    # compare priority. Lower priority gets shifted to start at last end.
+    scheduled: List[Dict] = []
     for e in todays:
-        evt_start = e["_dt"]
-        evt_end = evt_start + timedelta(minutes=_event_duration_minutes(e))
+        if not scheduled:
+            scheduled.append(e)
+            continue
 
-        # If there is a gap before this event, insert a "gap" focus block
-        if evt_start > cursor:
-            gap_len = (evt_start - cursor).seconds // 60
-            if gap_len >= 30:  # only schedule gaps >= 30min
-                blocks.append({
-                    "start": cursor.strftime("%H:%M"),
-                    "end": evt_start.strftime("%H:%M"),
-                    "title": "Open Focus Block",
-                    "priority": "normal",
-                    "source": "gap"
-                })
+        last = scheduled[-1]
+        if e["_start"] >= last["_end"]:
+            # no overlap
+            scheduled.append(e)
+            continue
 
-        # Add event block
-        status = e.get("status", "scheduled")
-        title = e.get("title", "Untitled")
-        prio = e.get("priority", "normal")
-        blocks.append({
-            "start": evt_start.strftime("%H:%M"),
-            "end": evt_end.strftime("%H:%M"),
-            "title": title,
-            "priority": prio,
-            "source": "event"
-        })
+        # Overlap detected. Decide which event stays.
+        if e["_pwt"] < last["_pwt"]:
+            # New event has higher priority → keep e in place; shift last forward
+            shift_start = e["_end"]
+            moved = dict(last)
+            moved["_start"] = max(shift_start, moved["_start"])
+            moved["_end"] = moved["_start"] + timedelta(minutes=moved["_dur"])
+            scheduled[-1] = e   # e takes the current slot
+            scheduled.append(moved)
+            nudges.append(
+                f"Rescheduled **{last.get('title','(untitled)')}** to {_fmt_hhmm(moved['_start'])} "
+                f"due to conflict with high-priority **{e.get('title','(untitled)')}**."
+            )
+        else:
+            # Existing last has higher (or equal) priority → shift e after last
+            moved = dict(e)
+            moved["_start"] = last["_end"]
+            moved["_end"] = moved["_start"] + timedelta(minutes=moved["_dur"])
+            scheduled.append(moved)
+            nudges.append(
+                f"Rescheduled **{e.get('title','(untitled)')}** to {_fmt_hhmm(moved['_start'])} "
+                f"due to conflict with **{last.get('title','(untitled)')}**."
+            )
 
-        # Nudge: if high priority, suggest preparing 10 min in advance
-        if prio == "high":
-            prep_time = (evt_start - timedelta(minutes=10)).strftime("%H:%M")
-            nudges.append(f"Prep for **{title}** at {prep_time} (high priority).")
+    # Build plan blocks with "gap" focus blocks
+    cursor = day_start
 
-        # If the event is marked done already, note it
-        if status == "done":
-            nudges.append(f"✅ Already completed: {title}")
+    def _add_gap(until: datetime, default_priority="normal"):
+        nonlocal blocks, cursor
+        if until <= cursor:
+            return
+        gap_len = int((until - cursor).total_seconds() // 60)
+        if gap_len >= MIN_GAP_BLOCK_MIN:
+            blocks.append({
+                "start": _fmt_hhmm(cursor),
+                "end": _fmt_hhmm(until),
+                "title": "Open Focus Block",
+                "priority": default_priority,
+                "source": "gap"
+            })
+        cursor = until
 
-        # Move cursor
-        if evt_end > cursor:
+    for e in scheduled:
+        evt_start = max(e["_start"], day_start)
+        evt_end = min(e["_end"], day_end)
+
+        # Pre-event gap
+        _add_gap(evt_start)
+
+        # Add event block (skip if outside work window)
+        if evt_end > evt_start:
+            blocks.append({
+                "start": _fmt_hhmm(evt_start),
+                "end": _fmt_hhmm(evt_end),
+                "title": e.get("title", "Untitled"),
+                "priority": (e.get("priority") or "normal"),
+                "source": "event",
+                "event_id": e.get("id")
+            })
             cursor = evt_end
 
-    # Fill end-of-day gap
-    if cursor < end_of_day:
-        gap_len = (end_of_day - cursor).seconds // 60
-        if gap_len >= 30:
+    # Post-end gap
+    if cursor < day_end:
+        gap_len = int((day_end - cursor).total_seconds() // 60)
+        if gap_len >= MIN_GAP_BLOCK_MIN:
             blocks.append({
-                "start": cursor.strftime("%H:%M"),
-                "end": end_of_day.strftime("%H:%M"),
+                "start": _fmt_hhmm(cursor),
+                "end": _fmt_hhmm(day_end),
                 "title": "Open Focus Block",
                 "priority": "low",
                 "source": "gap"
             })
 
-    # If no events, propose a simple structure
-    if not todays:
+    # No events at all: provide a default structure
+    if not scheduled:
         blocks = [
             {"start": "09:00", "end": "11:00", "title": "Deep Work", "priority": "high", "source": "gap"},
             {"start": "11:00", "end": "12:00", "title": "Admin / Messages", "priority": "normal", "source": "gap"},
