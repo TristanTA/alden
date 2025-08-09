@@ -4,7 +4,11 @@ import json
 import os
 from urllib.parse import parse_qs, urlparse
 
-FEEDBACK_FILE = "feedback.json"
+FEEDBACK_FILE = os.getenv(
+    "FEEDBACK_FILE",
+    os.path.join(os.path.dirname(__file__), "feedback.json")
+)
+
 
 
 def load_feedback():
