@@ -67,3 +67,7 @@ def add_calendar_event(event: Event):
     events.append({"id": event_id, "title": event.title, "time": event.time})
     save_calendar(events)
     return {"status": "ok", "event_id": event_id}
+
+@app.get("/ping")
+async def ping():
+    return {"message": "pong"}
