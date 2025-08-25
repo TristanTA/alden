@@ -1,73 +1,63 @@
-# main.py
-from fastapi import FastAPI
-from pydantic import BaseModel
-from datetime import datetime
-import json
-import os
+from fastapi import FastAPI, Request, HTTPException
+from pydantic import BaseModel, Field
+from typing import Optional
+import datetime, json, os
 
-app = FastAPI()
+app = FastAPI(title="Alden API v2")
 
-CALENDAR_FILE = "alden_main/alden_calendar/calendar_db.json"
+# -------------------------
+# MODELS
+# -------------------------
+class LocationEvent(BaseModel):
+    device_id: str
+    name: str = Field(..., description="Friendly place name, e.g., 'Home' or 'BYUI Library'")
+    latitude: float
+    longitude: float
+    ts: float = Field(..., description="Epoch timestamp when recorded")
 
-# --- Models ---
-class Event(BaseModel):
-    title: str
-    time: str  # ISO format e.g. "2025-08-20T15:00:00Z"
+class UsageEvent(BaseModel):
+    device_id: str
+    ts: float = Field(..., description="Epoch timestamp")
+    app: Optional[str] = None        # package/exe name
+    event: str                       # "foreground" | "idle" | "unlock" | "lock" | etc.
+    duration_s: Optional[float] = None
+    extra: Optional[dict] = None
 
-class PlanResponse(BaseModel):
-    plan: list[str]
+# -------------------------
+# FILE STORAGE (TEMP DB STUB)
+# -------------------------
+LOG_DIR = "./logs"
+os.makedirs(LOG_DIR, exist_ok=True)
 
-class NextEventResponse(BaseModel):
-    next_event: str | None
-    time: str | None
+def append_log(filename: str, entry: dict):
+    """Append line-delimited JSON for now (easy swap to DB later)."""
+    path = os.path.join(LOG_DIR, filename)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(entry) + "\n")
 
-class StatusResponse(BaseModel):
-    status: str
-    event_id: str | None = None
-
-# --- Helpers ---
-def load_calendar():
-    if not os.path.exists(CALENDAR_FILE):
-        return []
-    with open(CALENDAR_FILE, "r") as f:
-        return json.load(f)
-
-def save_calendar(events):
-    with open(CALENDAR_FILE, "w") as f:
-        json.dump(events, f, indent=2)
-
-# --- Endpoints ---
-@app.get("/api/plan/today", response_model=PlanResponse)
-def get_plan_today():
-    events = load_calendar()
-    today = datetime.now().date().isoformat()
-    todays_events = [
-        f"{e['title']} at {e['time']}"
-        for e in events
-        if e['time'].startswith(today)
-    ]
-    return {"plan": todays_events}
-
-@app.get("/api/plan/next", response_model=NextEventResponse)
-def get_next_event():
-    events = load_calendar()
-    now = datetime.utcnow().isoformat()
-    upcoming = sorted(
-        [e for e in events if e['time'] > now],
-        key=lambda e: e['time']
-    )
-    if upcoming:
-        return {"next_event": upcoming[0]['title'], "time": upcoming[0]['time']}
-    return {"next_event": None, "time": None}
-
-@app.post("/api/calendar/add", response_model=StatusResponse)
-def add_calendar_event(event: Event):
-    events = load_calendar()
-    event_id = f"evt_{len(events)+1}"
-    events.append({"id": event_id, "title": event.title, "time": event.time})
-    save_calendar(events)
-    return {"status": "ok", "event_id": event_id}
+# -------------------------
+# ENDPOINTS
+# -------------------------
 
 @app.get("/ping")
-async def ping():
-    return {"message": "pong"}
+def ping():
+    return {"status": "ok", "time": datetime.datetime.utcnow().isoformat()}
+
+@app.post("/shortcut-test")
+async def shortcut_test(request: Request):
+    data = await request.json()
+    entry = {"timestamp": datetime.datetime.utcnow().isoformat(), "data": data}
+    append_log("shortcut_logs.jsonl", entry)
+    return {"received": data, "status": "logged"}
+
+@app.post("/location")
+async def post_location(ev: LocationEvent):
+    entry = {"timestamp": datetime.datetime.utcnow().isoformat(), **ev.model_dump()}
+    append_log("location.jsonl", entry)
+    return {"ok": True, "stored": ev.dict()}
+
+@app.post("/usage")
+async def post_usage(ev: UsageEvent):
+    entry = {"timestamp": datetime.datetime.utcnow().isoformat(), **ev.model_dump()}
+    append_log("usage.jsonl", entry)
+    return {"ok": True, "stored": ev.dict()}
