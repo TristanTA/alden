@@ -3,6 +3,35 @@ from pydantic import BaseModel, Field
 from typing import Optional, List
 from datetime import datetime, date
 from alden_main.alden_calendar import calendar as cal
+import json, os
+
+app = FastAPI()
+
+class UsageEvent(BaseModel):
+    device_id: str
+    ts: float                    # epoch seconds
+    platform: str                # "android" | "windows" | "linux" | "mac"
+    event: str                   # "foreground" | "idle" | "unlock" | "lock" | etc.
+    app: Optional[str] = None    # package/exe name
+    title: Optional[str] = None  # window/app title
+    duration_s: Optional[float] = None
+    idle_s: Optional[float] = None
+    extra: Optional[dict] = None
+
+# very light auth
+ALDEN_INGEST_TOKEN = os.getenv("ALDEN_INGEST_TOKEN", "dev-token")
+LOG_DIR = "./usage_logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+
+@app.post("/ingest/usage")
+async def ingest_usage(ev: UsageEvent, x_alden_token: str = Header(None)):
+    if x_alden_token != ALDEN_INGEST_TOKEN:
+        return {"ok": False, "error": "bad token"}
+    # append line-delimited JSON (easy to parse later)
+    path = os.path.join(LOG_DIR, f"{ev.device_id}.jsonl")
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(ev.model_dump()) + "\n")
+    return {"ok": True}
 
 app = FastAPI(title="Alden API")
 
