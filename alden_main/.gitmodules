@@ -1,4 +1,0 @@
-[submodule "alden_main"]
-	path = alden_main
-	url = https://github.com/TristanTA/alden.git
-	branch = main
