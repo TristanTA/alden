@@ -66,15 +66,30 @@ async def post_location(request: Request):
             data = json.loads(text_body)
         except Exception:
             return {"error": "Body was not valid JSON", "raw": text_body}
-    
+
+    # 🔎 unwrap if wrapped in a "json" key
+    if isinstance(data, dict) and "json" in data and isinstance(data["json"], str):
+        try:
+            inner = json.loads(data["json"])
+            print("📥 Unwrapped inner JSON from 'json' key:", inner)
+            data = inner
+        except Exception as e:
+            print("❌ Failed to parse inner JSON string in 'json':", e)
+            return {"error": "Invalid nested JSON", "raw": data}
+
     print("📥 FINAL LOCATION DATA:", data)
     for k, v in data.items():
         print(f"   {k}: {v!r} (type={type(v).__name__})")
+        if isinstance(v, dict):
+            for kk, vv in v.items():
+                print(f"      {kk}: {vv!r} (type={type(vv).__name__})")
 
+    # ✅ Now Pydantic should be happy
     ev = LocationEvent(**data)
     payload = ev.dict()
     row_id = store_data("LOCATION", payload)
     return {"ok": True, "id": row_id, "stored": payload}
+
 
 
 
