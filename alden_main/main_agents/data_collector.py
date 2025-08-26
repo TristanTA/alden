@@ -48,11 +48,11 @@ def _utc_now_iso() -> str:
 # VALIDATORS
 # -----------------------
 def _validate_location(payload: Dict[str, Any]) -> None:
-    if "device_id" not in payload or "ts" not in payload or "coordinates" not in payload:
-        raise ValueError("LOCATION requires device_id, ts, and coordinates")
-    coords = payload["coordinates"]
+    if "device_id" not in payload or "ts" not in payload or "coords" not in payload:
+        raise ValueError("LOCATION requires device_id, ts, and coords")
+    coords = payload["coords"]
     if not isinstance(coords, dict) or "lat" not in coords or "lon" not in coords:
-        raise ValueError("LOCATION.coordinates must include 'lat' and 'lon'")
+        raise ValueError("LOCATION.coords must include 'lat' and 'lon'")
     float(coords["lat"]); float(coords["lon"]); float(payload["ts"])
 
 def _validate_usage(payload: Dict[str, Any]) -> None:
