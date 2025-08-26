@@ -18,7 +18,7 @@ def init_db():
             latitude REAL,
             longitude REAL,
             address TEXT,
-            ts REAL,              -- store as epoch seconds
+            ts REAL,              -- epoch seconds
             stored_at TEXT
         )""")
         con.execute("""CREATE TABLE IF NOT EXISTS usage_events (
@@ -50,10 +50,6 @@ def _utc_now_iso() -> str:
 def _validate_location(payload: Dict[str, Any]) -> None:
     if "device_id" not in payload or "ts" not in payload or "coords" not in payload:
         raise ValueError("LOCATION requires device_id, ts, and coords")
-    if not isinstance(payload["coords"], dict):
-        raise ValueError("coords must be a dict")
-    if "lat" not in payload["coords"] or "lon" not in payload["coords"]:
-        raise ValueError("coords must have lat and lon")
 
 def _validate_usage(payload: Dict[str, Any]) -> None:
     if "device_id" not in payload or "ts" not in payload or "event" not in payload:
@@ -72,8 +68,16 @@ VALIDATORS = {
 # -----------------------
 # STORE FUNCTIONS
 # -----------------------
+def _to_epoch(ts_value):
+    """Accept datetime or str and return epoch seconds"""
+    if isinstance(ts_value, datetime.datetime):
+        return ts_value.timestamp()
+    if isinstance(ts_value, str):
+        return datetime.datetime.fromisoformat(ts_value).timestamp()
+    raise ValueError(f"Unsupported ts type: {type(ts_value)}")
+
 def _store_location(con: sqlite3.Connection, payload: Dict[str, Any]) -> int:
-    ts = datetime.datetime.fromisoformat(payload["ts"]).timestamp()
+    ts = _to_epoch(payload["ts"])
     coords = payload["coords"]
     cur = con.execute(
         """INSERT INTO location_events
@@ -93,7 +97,7 @@ def _store_location(con: sqlite3.Connection, payload: Dict[str, Any]) -> int:
     return cur.lastrowid
 
 def _store_usage(con: sqlite3.Connection, payload: Dict[str, Any]) -> int:
-    ts = datetime.datetime.fromisoformat(payload["ts"]).timestamp()
+    ts = _to_epoch(payload["ts"])
     cur = con.execute(
         """INSERT INTO usage_events
            (device_id, ts, platform, event, app, title, stored_at)
@@ -111,8 +115,7 @@ def _store_usage(con: sqlite3.Connection, payload: Dict[str, Any]) -> int:
     return cur.lastrowid
 
 def _store_user(con: sqlite3.Connection, payload: Dict[str, Any]) -> int:
-    ts = datetime.datetime.fromisoformat(payload["created_at"]).timestamp() \
-        if isinstance(payload["created_at"], str) else payload["created_at"].timestamp()
+    ts = _to_epoch(payload["created_at"])
     cur = con.execute(
         """INSERT OR REPLACE INTO users
            (user_id, name, email, created_at, stored_at)

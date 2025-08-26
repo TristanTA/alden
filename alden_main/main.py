@@ -15,7 +15,7 @@ class Coordinates(BaseModel):
 
 class LocationEvent(BaseModel):
     device_id: str
-    ts: datetime.datetime  # ISO8601 string, parsed into datetime
+    ts: datetime.datetime  # ISO8601 string → parsed automatically
     platform: Optional[str] = None
     event: Optional[str] = None
     coords: Coordinates
@@ -53,11 +53,20 @@ async def shortcut_test(request: Request):
         f.write(json.dumps(entry) + "\n")
     return {"received": data, "status": "logged"}
 
+def _unwrap_json(data: dict):
+    """Handle Shortcuts wrapping everything in a 'json' key"""
+    if isinstance(data, dict) and "json" in data and isinstance(data["json"], str):
+        try:
+            return json.loads(data["json"])
+        except Exception as e:
+            print("❌ Failed to parse inner JSON:", e)
+            return data
+    return data
+
 @app.post("/location")
 async def post_location(request: Request):
     data = await request.json()
-    if isinstance(data, dict) and "json" in data and isinstance(data["json"], str):
-        data = json.loads(data["json"])
+    data = _unwrap_json(data)
     ev = LocationEvent(**data)
     payload = ev.dict()
     row_id = store_data("LOCATION", payload)
@@ -66,8 +75,7 @@ async def post_location(request: Request):
 @app.post("/usage")
 async def post_usage(request: Request):
     data = await request.json()
-    if isinstance(data, dict) and "json" in data and isinstance(data["json"], str):
-        data = json.loads(data["json"])
+    data = _unwrap_json(data)
     ev = UsageEvent(**data)
     payload = ev.dict()
     row_id = store_data("USAGE", payload)
@@ -76,8 +84,7 @@ async def post_usage(request: Request):
 @app.post("/user")
 async def post_user(request: Request):
     data = await request.json()
-    if isinstance(data, dict) and "json" in data and isinstance(data["json"], str):
-        data = json.loads(data["json"])
+    data = _unwrap_json(data)
     ev = User(**data)
     payload = ev.dict()
     row_id = store_data("USER", payload)
