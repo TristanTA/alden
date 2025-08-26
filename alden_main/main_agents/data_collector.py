@@ -137,63 +137,44 @@ def init_db(debug: bool = False) -> None:
     if debug:
         print(f"[INIT] Stores initialized at {DB_PATH}")
 
-# ----------------------- validators (minimal) -----------------------
+from typing import Dict, Any, Callable
+from datetime import datetime
 
-def _validate_gps(payload: Dict[str, Any]) -> None:
+def _validate_location(payload: Dict[str, Any]) -> None:
     if not isinstance(payload, dict):
-        raise ValueError("GPS payload must be an object")
-    if "coords" in payload:
-        if not isinstance(payload["coords"], str) or "," not in payload["coords"]:
-            raise ValueError("GPS.coords must be 'lat,lon' string")
-        lat_str, lon_str = payload["coords"].split(",", 1)
-        float(lat_str); float(lon_str)
-        return
-    if "lat" in payload and "lon" in payload:
-        float(payload["lat"]); float(payload["lon"])
-        return
-    raise ValueError("GPS requires 'coords' or 'lat'+'lon'")
+        raise ValueError("LOCATION payload must be an object")
+    for k in ("device_id", "name", "latitude", "longitude", "ts"):
+        if k not in payload:
+            raise ValueError(f"LOCATION missing '{k}'")
+    float(payload["latitude"])
+    float(payload["longitude"])
+    float(payload["ts"])
 
-def _validate_calendar(payload: Dict[str, Any]) -> None:
+def _validate_usage(payload: Dict[str, Any]) -> None:
     if not isinstance(payload, dict):
-        raise ValueError("CALENDAR payload must be an object")
-    events = payload.get("events")
-    if not isinstance(events, list):
-        raise ValueError("CALENDAR.events must be a list")
-    for i, ev in enumerate(events):
-        if not isinstance(ev, dict):
-            raise ValueError(f"CALENDAR.events[{i}] must be an object")
-        for k in ("title", "start_time", "end_time"):
-            if k not in ev:
-                raise ValueError(f"CALENDAR.events[{i}] missing '{k}'")
-        _iso_to_dt(ev["start_time"])
-        _iso_to_dt(ev["end_time"])
-
-def _validate_screen_usage(payload: Dict[str, Any]) -> None:
-    if not isinstance(payload, dict):
-        raise ValueError("SCREEN_USAGE payload must be an object")
-    sessions = payload.get("sessions")
-    if not isinstance(sessions, list):
-        raise ValueError("SCREEN_USAGE.sessions must be a list")
-    for i, s in enumerate(sessions):
-        if not isinstance(s, dict):
-            raise ValueError(f"SCREEN_USAGE.sessions[{i}] must be an object")
-        for k in ("app_name", "package_name", "start_time"):
-            if k not in s:
-                raise ValueError(f"SCREEN_USAGE.sessions[{i}] missing '{k}'")
-        _iso_to_dt(s["start_time"])
-        if "end_time" in s and s["end_time"] not in (None, ""):
-            _iso_to_dt(s["end_time"])
-        if "duration_seconds" in s and s["duration_seconds"] is not None:
-            int(s["duration_seconds"])
+        raise ValueError("USAGE payload must be an object")
+    for k in ("device_id", "ts", "event"):
+        if k not in payload:
+            raise ValueError(f"USAGE missing '{k}'")
+    float(payload["ts"])
+    if payload.get("duration_s") is not None:
+        float(payload["duration_s"])
+    if "extra" in payload and payload["extra"] is not None and not isinstance(payload["extra"], dict):
+        raise ValueError("USAGE.extra must be a dict")
 
 def _validate_user(payload: Dict[str, Any]) -> None:
     if not isinstance(payload, dict):
         raise ValueError("USER payload must be an object")
+    if "user_id" not in payload:
+        raise ValueError("USER missing 'user_id'")
+    if "email" in payload and payload["email"] not in (None, ""):
+        if "@" not in payload["email"]:
+            raise ValueError("USER.email must be valid")
 
-VALIDATORS: dict[Category, Callable[[Dict[str, Any]], None]] = {
-    "GPS": _validate_gps,
-    "CALENDAR": _validate_calendar,
-    "SCREEN_USAGE": _validate_screen_usage,
+# registry
+VALIDATORS: dict[str, Callable[[Dict[str, Any]], None]] = {
+    "LOCATION": _validate_location,
+    "USAGE": _validate_usage,
     "USER": _validate_user,
 }
 
