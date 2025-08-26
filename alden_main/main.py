@@ -55,27 +55,27 @@ async def shortcut_test(request: Request):
 
 @app.post("/location")
 async def post_location(request: Request):
-    data = await request.json()
-    # If it's wrapped in "text", try to parse inner JSON
-    if "text" in data and isinstance(data["text"], str):
+    raw_body = await request.body()
+    try:
+        data = await request.json()
+    except Exception:
+        # fallback if body was plain text
+        text_body = raw_body.decode("utf-8").strip()
+        print("📥 RAW BODY (text):", text_body)
         try:
-            inner = json.loads(data["text"])
-            print("📥 Unwrapped inner JSON:", inner)
-            data = inner
-        except Exception as e:
-            print("❌ Failed to parse inner text JSON:", e)
+            data = json.loads(text_body)
+        except Exception:
+            return {"error": "Body was not valid JSON", "raw": text_body}
     
     print("📥 FINAL LOCATION DATA:", data)
     for k, v in data.items():
         print(f"   {k}: {v!r} (type={type(v).__name__})")
-        if isinstance(v, dict):
-            for kk, vv in v.items():
-                print(f"      {kk}: {vv!r} (type={type(vv).__name__})")
 
-    ev = LocationEvent(**data)  # now should validate correctly
-    payload = ev.dict(by_alias=True)
+    ev = LocationEvent(**data)
+    payload = ev.dict()
     row_id = store_data("LOCATION", payload)
     return {"ok": True, "id": row_id, "stored": payload}
+
 
 
     # let Pydantic validate
