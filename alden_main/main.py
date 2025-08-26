@@ -16,8 +16,8 @@ class Coordinates(BaseModel):
 class LocationEvent(BaseModel):
     device_id: str
     ts: float  # epoch seconds
-    platform: Optional[str] = None  # "ios" | "macos" | "windows" | "android"
-    event: Optional[str] = None     # "location"
+    platform: Optional[str] = None
+    event: Optional[str] = None
     coords: Coordinates
     address: Optional[str] = None
 
@@ -25,7 +25,7 @@ class UsageEvent(BaseModel):
     device_id: str
     ts: float
     platform: Optional[str] = None
-    event: str                      # "foreground" | "closed"
+    event: str
     app: Optional[str] = None
     title: Optional[str] = None
 
@@ -54,22 +54,45 @@ async def shortcut_test(request: Request):
     return {"received": data, "status": "logged"}
 
 @app.post("/location")
-async def post_location(ev: LocationEvent):
+async def post_location(request: Request):
+    # DEBUG: show raw JSON + types
+    data = await request.json()
+    print("📥 RAW LOCATION DATA:", data)
+    for k, v in data.items():
+        print(f"   {k}: {v!r} (type={type(v).__name__})")
+        if isinstance(v, dict):
+            for kk, vv in v.items():
+                print(f"      {kk}: {vv!r} (type={type(vv).__name__})")
+
+    # let Pydantic validate
+    ev = LocationEvent(**data)
     payload = ev.dict(by_alias=True)
     validate("LOCATION", payload)
     row_id = store_data("LOCATION", payload)
     return {"ok": True, "id": row_id, "stored": payload}
 
 @app.post("/usage")
-async def post_usage(ev: UsageEvent):
+async def post_usage(request: Request):
+    data = await request.json()
+    print("📥 RAW USAGE DATA:", data)
+    for k, v in data.items():
+        print(f"   {k}: {v!r} (type={type(v).__name__})")
+
+    ev = UsageEvent(**data)
     payload = ev.dict(by_alias=True)
     validate("USAGE", payload)
     row_id = store_data("USAGE", payload)
     return {"ok": True, "id": row_id, "stored": payload}
 
 @app.post("/user")
-async def post_user(user: User):
-    payload = user.dict()
+async def post_user(request: Request):
+    data = await request.json()
+    print("📥 RAW USER DATA:", data)
+    for k, v in data.items():
+        print(f"   {k}: {v!r} (type={type(v).__name__})")
+
+    ev = User(**data)
+    payload = ev.dict()
     validate("USER", payload)
     row_id = store_data("USER", payload)
     return {"ok": True, "id": row_id, "stored": payload}
