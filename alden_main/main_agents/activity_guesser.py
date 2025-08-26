@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Dict, Any
 import json, os
 from datetime import datetime, timezone
-from backend.models.gpt5nano_model import run_gpt5nano
+from models.gpt5nano import run_gpt5nano
 
 def guess(feature_bundle: Dict[str, Any], *, api_mode: bool = False, debug: bool = False) -> Dict[str, Any]:
     system_prompt = """You are an assistant that infers a user's most likely activity
