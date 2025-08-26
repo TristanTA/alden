@@ -15,7 +15,7 @@ class Coordinates(BaseModel):
 
 class LocationEvent(BaseModel):
     device_id: str
-    ts: float  # epoch seconds
+    ts: datetime.datetime  # ISO8601 string, parsed into datetime
     platform: Optional[str] = None
     event: Optional[str] = None
     coords: Coordinates
@@ -23,7 +23,7 @@ class LocationEvent(BaseModel):
 
 class UsageEvent(BaseModel):
     device_id: str
-    ts: float
+    ts: datetime.datetime  # ISO8601
     platform: Optional[str] = None
     event: str
     app: Optional[str] = None
@@ -33,7 +33,7 @@ class User(BaseModel):
     user_id: str
     name: Optional[str] = None
     email: Optional[str] = None
-    created_at: float = Field(default_factory=lambda: datetime.datetime.utcnow().timestamp())
+    created_at: datetime.datetime = Field(default_factory=lambda: datetime.datetime.utcnow())
 
 # -----------------------
 # APP
@@ -45,97 +45,40 @@ init_db()
 def ping():
     return {"status": "ok", "time": datetime.datetime.utcnow().isoformat()}
 
+@app.post("/shortcut-test")
+async def shortcut_test(request: Request):
+    data = await request.json()
+    entry = {"timestamp": datetime.datetime.utcnow().isoformat(), "data": data}
+    with open("shortcut_logs.jsonl", "a") as f:
+        f.write(json.dumps(entry) + "\n")
+    return {"received": data, "status": "logged"}
+
 @app.post("/location")
 async def post_location(request: Request):
-    raw_body = await request.body()
-    try:
-        data = await request.json()
-    except Exception:
-        # fallback if body was plain text
-        text_body = raw_body.decode("utf-8").strip()
-        print("📥 RAW BODY (text):", text_body)
-        try:
-            data = json.loads(text_body)
-        except Exception:
-            return {"error": "Body was not valid JSON", "raw": text_body}
-
-    # 🔎 unwrap if wrapped in a "json" key
+    data = await request.json()
     if isinstance(data, dict) and "json" in data and isinstance(data["json"], str):
-        try:
-            inner = json.loads(data["json"])
-            print("📥 Unwrapped inner JSON from 'json' key:", inner)
-            data = inner
-        except Exception as e:
-            print("❌ Failed to parse inner JSON string in 'json':", e)
-            return {"error": "Invalid nested JSON", "raw": data}
-
-    print("📥 FINAL LOCATION DATA:", data)
-    for k, v in data.items():
-        print(f"   {k}: {v!r} (type={type(v).__name__})")
-        if isinstance(v, dict):
-            for kk, vv in v.items():
-                print(f"      {kk}: {vv!r} (type={type(vv).__name__})")
-
-    # ✅ Now Pydantic should be happy
+        data = json.loads(data["json"])
     ev = LocationEvent(**data)
     payload = ev.dict()
-    row_id = store_data("LOCATION", payload)
-    return {"ok": True, "id": row_id, "stored": payload}
-
-
-
-
-    # let Pydantic validate
-    ev = LocationEvent(**data)
-    payload = ev.dict(by_alias=True)
-    validate("LOCATION", payload)
     row_id = store_data("LOCATION", payload)
     return {"ok": True, "id": row_id, "stored": payload}
 
 @app.post("/usage")
 async def post_usage(request: Request):
-    raw_body = await request.body()
-    try:
-        data = await request.json()
-    except Exception:
-        # fallback if body was plain text
-        text_body = raw_body.decode("utf-8").strip()
-        print("📥 RAW BODY (text):", text_body)
-        try:
-            data = json.loads(text_body)
-        except Exception:
-            return {"error": "Body was not valid JSON", "raw": text_body}
-
-    # 🔎 unwrap if wrapped in a "json" key
+    data = await request.json()
     if isinstance(data, dict) and "json" in data and isinstance(data["json"], str):
-        try:
-            inner = json.loads(data["json"])
-            print("📥 Unwrapped inner JSON from 'json' key:", inner)
-            data = inner
-        except Exception as e:
-            print("❌ Failed to parse inner JSON string in 'json':", e)
-            return {"error": "Invalid nested JSON", "raw": data}
-
-    print("📥 FINAL USAGE DATA:", data)
-    for k, v in data.items():
-        print(f"   {k}: {v!r} (type={type(v).__name__})")
-
+        data = json.loads(data["json"])
     ev = UsageEvent(**data)
-    payload = ev.dict(by_alias=True)
-    validate("USAGE", payload)
+    payload = ev.dict()
     row_id = store_data("USAGE", payload)
     return {"ok": True, "id": row_id, "stored": payload}
-
 
 @app.post("/user")
 async def post_user(request: Request):
     data = await request.json()
-    print("📥 RAW USER DATA:", data)
-    for k, v in data.items():
-        print(f"   {k}: {v!r} (type={type(v).__name__})")
-
+    if isinstance(data, dict) and "json" in data and isinstance(data["json"], str):
+        data = json.loads(data["json"])
     ev = User(**data)
     payload = ev.dict()
-    validate("USER", payload)
     row_id = store_data("USER", payload)
     return {"ok": True, "id": row_id, "stored": payload}

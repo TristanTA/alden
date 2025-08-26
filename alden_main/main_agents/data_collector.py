@@ -1,5 +1,6 @@
 import sqlite3
 import datetime
+import json
 from typing import Dict, Any
 
 DB_PATH = "alden.db"
@@ -17,7 +18,7 @@ def init_db():
             latitude REAL,
             longitude REAL,
             address TEXT,
-            ts REAL,
+            ts REAL,              -- store as epoch seconds
             stored_at TEXT
         )""")
         con.execute("""CREATE TABLE IF NOT EXISTS usage_events (
@@ -49,22 +50,18 @@ def _utc_now_iso() -> str:
 def _validate_location(payload: Dict[str, Any]) -> None:
     if "device_id" not in payload or "ts" not in payload or "coords" not in payload:
         raise ValueError("LOCATION requires device_id, ts, and coords")
-    coords = payload["coords"]
-    if not isinstance(coords, dict) or "lat" not in coords or "lon" not in coords:
+    if not isinstance(payload["coords"], dict):
+        raise ValueError("coords must be a dict")
+    if "lat" not in payload["coords"] or "lon" not in payload["coords"]:
         raise ValueError("coords must have lat and lon")
-    float(coords["lat"]); float(coords["lon"]); float(payload["ts"])
 
 def _validate_usage(payload: Dict[str, Any]) -> None:
     if "device_id" not in payload or "ts" not in payload or "event" not in payload:
         raise ValueError("USAGE requires device_id, ts, and event")
-    float(payload["ts"])
 
 def _validate_user(payload: Dict[str, Any]) -> None:
     if "user_id" not in payload:
         raise ValueError("USER requires user_id")
-    if "email" in payload and payload["email"] not in (None, ""):
-        if "@" not in payload["email"]:
-            raise ValueError("USER.email must be valid")
 
 VALIDATORS = {
     "LOCATION": _validate_location,
@@ -76,6 +73,7 @@ VALIDATORS = {
 # STORE FUNCTIONS
 # -----------------------
 def _store_location(con: sqlite3.Connection, payload: Dict[str, Any]) -> int:
+    ts = datetime.datetime.fromisoformat(payload["ts"]).timestamp()
     coords = payload["coords"]
     cur = con.execute(
         """INSERT INTO location_events
@@ -88,20 +86,21 @@ def _store_location(con: sqlite3.Connection, payload: Dict[str, Any]) -> int:
             float(coords["lat"]),
             float(coords["lon"]),
             payload.get("address"),
-            float(payload["ts"]),
+            ts,
             _utc_now_iso(),
         ),
     )
     return cur.lastrowid
 
 def _store_usage(con: sqlite3.Connection, payload: Dict[str, Any]) -> int:
+    ts = datetime.datetime.fromisoformat(payload["ts"]).timestamp()
     cur = con.execute(
         """INSERT INTO usage_events
            (device_id, ts, platform, event, app, title, stored_at)
            VALUES (?, ?, ?, ?, ?, ?, ?)""",
         (
             payload["device_id"],
-            float(payload["ts"]),
+            ts,
             payload.get("platform"),
             payload["event"],
             payload.get("app"),
@@ -112,6 +111,8 @@ def _store_usage(con: sqlite3.Connection, payload: Dict[str, Any]) -> int:
     return cur.lastrowid
 
 def _store_user(con: sqlite3.Connection, payload: Dict[str, Any]) -> int:
+    ts = datetime.datetime.fromisoformat(payload["created_at"]).timestamp() \
+        if isinstance(payload["created_at"], str) else payload["created_at"].timestamp()
     cur = con.execute(
         """INSERT OR REPLACE INTO users
            (user_id, name, email, created_at, stored_at)
@@ -120,7 +121,7 @@ def _store_user(con: sqlite3.Connection, payload: Dict[str, Any]) -> int:
             payload["user_id"],
             payload.get("name"),
             payload.get("email"),
-            float(payload.get("created_at", datetime.datetime.utcnow().timestamp())),
+            ts,
             _utc_now_iso(),
         ),
     )
