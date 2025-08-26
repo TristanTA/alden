@@ -1,6 +1,5 @@
 import sqlite3
 import datetime
-import json
 from typing import Dict, Any
 
 DB_PATH = "alden.db"
@@ -52,7 +51,7 @@ def _validate_location(payload: Dict[str, Any]) -> None:
         raise ValueError("LOCATION requires device_id, ts, and coords")
     coords = payload["coords"]
     if not isinstance(coords, dict) or "lat" not in coords or "lon" not in coords:
-        raise ValueError("LOCATION.coords must include 'lat' and 'lon'")
+        raise ValueError("coords must have lat and lon")
     float(coords["lat"]); float(coords["lon"]); float(payload["ts"])
 
 def _validate_usage(payload: Dict[str, Any]) -> None:
@@ -77,7 +76,7 @@ VALIDATORS = {
 # STORE FUNCTIONS
 # -----------------------
 def _store_location(con: sqlite3.Connection, payload: Dict[str, Any]) -> int:
-    coords = payload["coordinates"]
+    coords = payload["coords"]
     cur = con.execute(
         """INSERT INTO location_events
            (device_id, platform, event, latitude, longitude, address, ts, stored_at)

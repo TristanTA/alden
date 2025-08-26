@@ -1,7 +1,6 @@
 import datetime
 import json
-import sqlite3
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request
 from pydantic import BaseModel, Field
 from typing import Optional
 
@@ -10,18 +9,22 @@ from alden_main.main_agents.data_collector import validate, store_data, init_db
 # -----------------------
 # MODELS
 # -----------------------
+class Coordinates(BaseModel):
+    lat: float
+    lon: float
+
 class LocationEvent(BaseModel):
     device_id: str
     ts: float  # epoch seconds
     platform: Optional[str] = None  # "ios" | "macos" | "windows" | "android"
     event: Optional[str] = None     # "location"
-    coords: dict = Field(..., description="{'lat': float, 'lon': float}")
+    coords: Coordinates
     address: Optional[str] = None
 
 class UsageEvent(BaseModel):
     device_id: str
     ts: float
-    platform: Optional[str] = None  # "ios" | "macos" | "windows" | "android"
+    platform: Optional[str] = None
     event: str                      # "foreground" | "closed"
     app: Optional[str] = None
     title: Optional[str] = None
