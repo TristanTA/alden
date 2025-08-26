@@ -3,7 +3,7 @@ import datetime
 import json
 from typing import Dict, Any
 
-DB_PATH = "alden.db"
+DB_PATH = "/var/lib/alden/alden.db"
 
 # -----------------------
 # DB INIT
