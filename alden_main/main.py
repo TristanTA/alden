@@ -51,6 +51,7 @@ async def shortcut_test(request: Request):
     entry = {"timestamp": datetime.datetime.utcnow().isoformat(), "data": data}
     with open("shortcut_logs.jsonl", "a") as f:
         f.write(json.dumps(entry) + "\n")
+    print("📥 SHORTCUT TEST:", entry)
     return {"received": data, "status": "logged"}
 
 def _unwrap_json(data: dict):
@@ -63,29 +64,53 @@ def _unwrap_json(data: dict):
             return data
     return data
 
+# -----------------------
+# ENDPOINTS
+# -----------------------
 @app.post("/location")
 async def post_location(request: Request):
     data = await request.json()
     data = _unwrap_json(data)
-    ev = LocationEvent(**data)
-    payload = ev.dict()
-    row_id = store_data("LOCATION", payload)
-    return {"ok": True, "id": row_id, "stored": payload}
+    print("📥 RAW LOCATION DATA:", data)
+
+    try:
+        ev = LocationEvent(**data)
+        payload = ev.dict()
+        row_id = store_data("LOCATION", payload)
+        print("✅ STORED LOCATION:", payload)
+        return {"ok": True, "id": row_id, "stored": payload}
+    except Exception as e:
+        print("❌ ERROR storing LOCATION:", e)
+        return {"ok": False, "error": str(e), "raw": data}
 
 @app.post("/usage")
 async def post_usage(request: Request):
     data = await request.json()
     data = _unwrap_json(data)
-    ev = UsageEvent(**data)
-    payload = ev.dict()
-    row_id = store_data("USAGE", payload)
-    return {"ok": True, "id": row_id, "stored": payload}
+    print("📥 RAW USAGE DATA:", data)
+
+    try:
+        ev = UsageEvent(**data)
+        payload = ev.dict()
+        row_id = store_data("USAGE", payload)
+        print("✅ STORED USAGE:", payload)
+        return {"ok": True, "id": row_id, "stored": payload}
+    except Exception as e:
+        print("❌ ERROR storing USAGE:", e)
+        return {"ok": False, "error": str(e), "raw": data}
 
 @app.post("/user")
 async def post_user(request: Request):
     data = await request.json()
     data = _unwrap_json(data)
-    ev = User(**data)
-    payload = ev.dict()
-    row_id = store_data("USER", payload)
-    return {"ok": True, "id": row_id, "stored": payload}
+    print("📥 RAW USER DATA:", data)
+
+    try:
+        ev = User(**data)
+        payload = ev.dict()
+        row_id = store_data("USER", payload)
+        print("✅ STORED USER:", payload)
+        return {"ok": True, "id": row_id, "stored": payload}
+    except Exception as e:
+        print("❌ ERROR storing USER:", e)
+        return {"ok": False, "error": str(e), "raw": data}
