@@ -15,7 +15,7 @@ class LocationEvent(BaseModel):
     ts: float  # epoch seconds
     platform: Optional[str] = None  # "ios" | "macos" | "windows" | "android"
     event: Optional[str] = None     # "location"
-    coordinates: dict = Field(..., description="{'lat': float, 'lon': float}")
+    coords: dict = Field(..., description="{'lat': float, 'lon': float}")
     address: Optional[str] = None
 
 class UsageEvent(BaseModel):
