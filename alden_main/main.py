@@ -123,8 +123,8 @@ from fastapi import FastAPI
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from alden_main.models.models_calendar import Base
-from main_agents.caldav_client import AldenCalDAV
-from main_agents.calendar_sync import poll_loop
+from alden_main.main_agents.caldav_client import AldenCalDAV
+from alden_main.main_agents.calendar_sync import poll_loop
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./alden.db")
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {})
