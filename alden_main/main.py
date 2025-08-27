@@ -143,3 +143,7 @@ app = FastAPI()
 @app.on_event("startup")
 async def _startup():
     asyncio.create_task(poll_loop(caldav, SessionLocal, int(os.getenv("POLL_SECONDS","60"))))
+    
+from routes_calendar import mount_calendar_routes
+mount_calendar_routes(app, SessionLocal, caldav)
+
