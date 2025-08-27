@@ -122,9 +122,9 @@ import os, asyncio
 from fastapi import FastAPI
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from models_calendar import Base
-from caldav_client import AldenCalDAV
-from calendar_sync import poll_loop
+from main_agents.models_calendar import Base
+from main_agents.caldav_client import AldenCalDAV
+from main_agents.calendar_sync import poll_loop
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./alden.db")
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {})
@@ -144,6 +144,6 @@ app = FastAPI()
 async def _startup():
     asyncio.create_task(poll_loop(caldav, SessionLocal, int(os.getenv("POLL_SECONDS","60"))))
     
-from routes_calendar import mount_calendar_routes
+from main_agents.routes_calendar import mount_calendar_routes
 mount_calendar_routes(app, SessionLocal, caldav)
 
