@@ -4,6 +4,9 @@ from fastapi import FastAPI, Request
 from pydantic import BaseModel, Field
 from typing import Optional
 
+from dotenv import load_dotenv
+load_dotenv()
+
 from alden_main.main_agents.data_collector import validate, store_data, init_db
 
 # -----------------------
