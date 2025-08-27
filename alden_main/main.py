@@ -144,6 +144,6 @@ app = FastAPI()
 async def _startup():
     asyncio.create_task(poll_loop(caldav, SessionLocal, int(os.getenv("POLL_SECONDS","60"))))
     
-from main_agents.routes_calendar import mount_calendar_routes
+from alden_main.main_agents.routes_calendar import mount_calendar_routes
 mount_calendar_routes(app, SessionLocal, caldav)
 
