@@ -1,7 +1,7 @@
 import asyncio, hashlib
 from datetime import datetime, timedelta, timezone
 from icalendar import Calendar
-from models_calendar import EventCache
+from alden_main.models.models_calendar import EventCache
 from sqlalchemy.orm import Session
 
 def _hash(ics: str) -> str:
