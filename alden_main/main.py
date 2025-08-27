@@ -122,7 +122,7 @@ import os, asyncio
 from fastapi import FastAPI
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from main_agents.models_calendar import Base
+from models.models_calendar import Base
 from main_agents.caldav_client import AldenCalDAV
 from main_agents.calendar_sync import poll_loop
 
