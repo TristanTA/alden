@@ -1,8 +1,8 @@
 from fastapi import APIRouter
 from sqlalchemy.orm import sessionmaker
 from dateutil import parser as dtparse
-from models_calendar import EventCache, ChangeLog
-from caldav_client import AldenCalDAV
+from alden_main.models.models_calendar import EventCache, ChangeLog
+from alden_main.main_agents.caldav_client import AldenCalDAV
 
 router = APIRouter(prefix="/calendar", tags=["calendar"])
 
