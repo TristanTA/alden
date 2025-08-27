@@ -117,3 +117,29 @@ async def post_user(request: Request):
     except Exception as e:
         print("❌ ERROR storing USER:", e)
         return {"ok": False, "error": str(e), "raw": data}
+
+import os, asyncio
+from fastapi import FastAPI
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from models_calendar import Base
+from caldav_client import AldenCalDAV
+from calendar_sync import poll_loop
+
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./alden.db")
+engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False} if DATABASE_URL.startswith("sqlite") else {})
+SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
+Base.metadata.create_all(engine)
+
+caldav = AldenCalDAV(
+    base_url=os.environ["CALDAV_BASE_URL"],
+    username=os.environ["CALDAV_USERNAME"],
+    password=os.environ["CALDAV_PASSWORD"],
+    calendar_name=os.getenv("CALDAV_CALENDAR_NAME","Alden"),
+)
+
+app = FastAPI()
+
+@app.on_event("startup")
+async def _startup():
+    asyncio.create_task(poll_loop(caldav, SessionLocal, int(os.getenv("POLL_SECONDS","60"))))
