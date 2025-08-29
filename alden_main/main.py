@@ -44,7 +44,7 @@ class User(BaseModel):
 # -----------------------
 app = FastAPI(title="Alden API")
 init_db()
-app.include_router(routes_calendar)
+app.include_router(caldav_router)
 
 @app.get("/ping")
 def ping():
