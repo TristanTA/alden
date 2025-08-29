@@ -1,44 +1,49 @@
+# alden/routers/caldav_routes.py
 from fastapi import APIRouter
-from sqlalchemy.orm import sessionmaker
-from dateutil import parser as dtparse
-from alden_main.models.models_calendar import EventCache, ChangeLog
-from alden_main.main_agents.caldav_client import AldenCalDAV
+from pydantic import BaseModel, Field
+from datetime import datetime
+from typing import List, Optional
+from alden.caldav_client import AldenCalDAV, _tz
 
-router = APIRouter(prefix="/calendar", tags=["calendar"])
+router = APIRouter(prefix="/caldav", tags=["caldav"])
+cal = AldenCalDAV()
 
-def mount_calendar_routes(app, session_factory: sessionmaker, caldav: AldenCalDAV):
-    @router.get("/events")
-    def list_events(start: str, end: str):
-        s = session_factory()
-        q = (s.query(EventCache)
-             .filter(EventCache.dtstart != None)
-             .filter(EventCache.dtstart < dtparse.parse(end))
-             .filter(EventCache.dtend > dtparse.parse(start))
-             .order_by(EventCache.dtstart.asc()))
-        out = [{"uid": r.uid, "summary": r.summary,
-                "start": r.dtstart.isoformat() if r.dtstart else None,
-                "end": r.dtend.isoformat() if r.dtend else None,
-                "all_day": r.all_day, "tz": r.tzid, "etag": r.etag} for r in q.all()]
-        s.close(); return out
+class CreateEventBody(BaseModel):
+    summary: str
+    start: datetime
+    end: datetime
+    description: Optional[str] = None
+    location: Optional[str] = None
+    alarms_minutes: Optional[List[int]] = Field(default=None)
+    rrule: Optional[str] = None
+    categories: Optional[List[str]] = None
+    x_alden: Optional[dict] = None
 
-    @router.post("/events")
-    def create_event(summary: str, start: str, end: str, description: str = ""):
-        uid = caldav.create_event(summary, dtparse.parse(start), dtparse.parse(end), description=description)
-        s = session_factory(); s.add(ChangeLog(uid=uid, action="create", reason="api")); s.commit(); s.close()
-        return {"ok": True, "uid": uid}
+@router.post("/events")
+def create_event(body: CreateEventBody):
+    uid = cal.create_event(
+        summary=body.summary,
+        start=body.start,
+        end=body.end,
+        description=body.description,
+        location=body.location,
+        alarms_minutes=body.alarms_minutes,
+        rrule=body.rrule,
+        categories=body.categories,
+        x_alden=body.x_alden,
+    )
+    return {"uid": uid}
 
-    @router.put("/events/{uid}")
-    def update_event(uid: str, summary: str = None, start: str = None, end: str = None, description: str = None):
-        patches = {}
-        if summary is not None: patches["summary"] = summary
-        if description is not None: patches["description"] = description
-        if start is not None: patches["start"] = dtparse.parse(start)
-        if end is not None: patches["end"] = dtparse.parse(end)
-        caldav.update_event(uid, patches)
-        return {"ok": True}
+@router.get("/events")
+def list_events(day_start: datetime, day_end: datetime):
+    return cal.list_events_between(day_start, day_end)
 
-    @router.delete("/events/{uid}")
-    def delete_event(uid: str):
-        return {"ok": caldav.delete_event(uid)}
+@router.patch("/events/{uid}")
+def update_event(uid: str, patch: dict):
+    cal.update_event(uid, patch)
+    return {"ok": True}
 
-    app.include_router(router)
+@router.delete("/events/{uid}")
+def delete_event(uid: str):
+    cal.delete_event(uid)
+    return {"ok": True}
