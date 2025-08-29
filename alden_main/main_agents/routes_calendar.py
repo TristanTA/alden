@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import List, Optional
-from alden.caldav_client import AldenCalDAV, _tz
+from alden_main.main_agents.caldav_client import AldenCalDAV, _tz
 
 router = APIRouter(prefix="/caldav", tags=["caldav"])
 cal = AldenCalDAV()
