@@ -37,9 +37,9 @@ class AldenCalDAV:
         self.password = password
         self.calendar_name = calendar_name
 
-        self.client = DAVClient(self.url, username=self.username, password=self.password)
-        self.principal: Principal = self.client.principal()
         self.calendar: CalDAVCalendar = self._ensure_calendar(self.calendar_name)
+        self._client: Optional[DAVClient] = None
+        self._principal: Optional[Principal] = None
 
     def _ensure_connected(self):
         if self._client is None:
