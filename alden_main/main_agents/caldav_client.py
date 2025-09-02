@@ -37,9 +37,12 @@ class AldenCalDAV:
         self.password = password
         self.calendar_name = calendar_name
 
-        self.calendar: CalDAVCalendar = self._ensure_calendar(self.calendar_name)
+        # init placeholders BEFORE any method call
         self._client: Optional[DAVClient] = None
         self._principal: Optional[Principal] = None
+
+        # ensure we have a calendar object
+        self.calendar: CalDAVCalendar = self._ensure_calendar(self.calendar_name)
 
     def _ensure_connected(self):
         if self._client is None:
@@ -47,24 +50,22 @@ class AldenCalDAV:
                 url=self.url,
                 username=self.username,
                 password=self.password,
-                # keep default verify=True for HTTPS; irrelevant for HTTP
             )
         if self._principal is None:
-            # This triggers a real request; wrap for nice errors
             self._principal = self._client.principal()
 
     def get_calendars(self):
         self._ensure_connected()
         return self._principal.calendars()
 
-    # Create or fetch the working calendar
     def _ensure_calendar(self, name: str) -> CalDAVCalendar:
+        self._ensure_connected()   # <— make sure client & principal exist
+
         calendars = self._principal.calendars()
         for c in calendars:
             try:
                 props = c.get_properties([("{DAV:}", "displayname")])
                 disp = props.get(("{DAV:}", "displayname"))
-                # displayname may be bytes or str depending on server/back-end
                 if (isinstance(disp, bytes) and disp.decode() == name) or disp == name:
                     return c
             except Exception:
