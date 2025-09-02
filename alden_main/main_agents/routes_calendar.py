@@ -1,14 +1,40 @@
-# alden/routers/caldav_routes.py
-from fastapi import APIRouter, Depends
-from starlette.requests import Request
-from pydantic import BaseModel, Field
+# alden_main/main_agents/routes_calendar.py
+from __future__ import annotations
+
 from datetime import datetime
-from typing import List, Optional
-from alden_main.main_agents.caldav_client import AldenCalDAV, _tz
+from typing import Generator, List, Optional
+
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
+from starlette.requests import Request
+
+from alden_main.main_agents.caldav_client import AldenCalDAV
 
 router = APIRouter(prefix="/caldav", tags=["caldav"])
-cal = AldenCalDAV()
 
+
+# ---------- App state accessors ----------
+def get_caldav(request: Request) -> AldenCalDAV:
+    caldav: AldenCalDAV = getattr(request.app.state, "caldav", None)
+    if caldav is None:
+        raise HTTPException(status_code=500, detail="CalDAV client not initialized")
+    return caldav
+
+
+def get_db(request: Request) -> Generator:
+    """Yield a SQLAlchemy session if SessionLocal was provided at mount time."""
+    SessionLocal = getattr(request.app.state, "SessionLocal", None)
+    if SessionLocal is None:
+        # You can remove this if you always mount with SessionLocal
+        raise HTTPException(status_code=500, detail="DB SessionLocal not configured")
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# ---------- Schemas ----------
 class CreateEventBody(BaseModel):
     summary: str
     start: datetime
@@ -20,9 +46,30 @@ class CreateEventBody(BaseModel):
     categories: Optional[List[str]] = None
     x_alden: Optional[dict] = None
 
+
+# ---------- Routes ----------
+@router.get("/health")
+def health(caldav: AldenCalDAV = Depends(get_caldav)):
+    # Light touch to verify connectivity without crashing
+    try:
+        _ = caldav.get_calendars()
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.get("/calendars")
+def list_cals(caldav: AldenCalDAV = Depends(get_caldav)):
+    return [getattr(c, "url", str(c)) for c in caldav.get_calendars()]
+
+
 @router.post("/events")
-def create_event(body: CreateEventBody):
-    uid = cal.create_event(
+def create_event(
+    body: CreateEventBody,
+    caldav: AldenCalDAV = Depends(get_caldav),
+    # db: Session = Depends(get_db),  # uncomment if you use DB here
+):
+    uid = caldav.create_event(
         summary=body.summary,
         start=body.start,
         end=body.end,
@@ -35,23 +82,46 @@ def create_event(body: CreateEventBody):
     )
     return {"uid": uid}
 
+
 @router.get("/events")
-def list_events(day_start: datetime, day_end: datetime):
-    return cal.list_events_between(day_start, day_end)
+def list_events(
+    day_start: datetime,
+    day_end: datetime,
+    caldav: AldenCalDAV = Depends(get_caldav),
+):
+    return caldav.list_events_between(day_start, day_end)
+
 
 @router.patch("/events/{uid}")
-def update_event(uid: str, patch: dict):
-    cal.update_event(uid, patch)
+def update_event(
+    uid: str,
+    patch: dict,
+    caldav: AldenCalDAV = Depends(get_caldav),
+):
+    caldav.update_event(uid, patch)
     return {"ok": True}
+
 
 @router.delete("/events/{uid}")
-def delete_event(uid: str):
-    cal.delete_event(uid)
+def delete_event(
+    uid: str,
+    caldav: AldenCalDAV = Depends(get_caldav),
+):
+    caldav.delete_event(uid)
     return {"ok": True}
-    
-def get_caldav(request: Request) -> AldenCalDAV:
-    return request.app.state.caldav
 
-@router.get("/calendars")
-def list_cals(caldav: AldenCalDAV = Depends(get_caldav)):
-    return [c.url for c in caldav.get_calendars()]
+
+# ---------- Mount helper ----------
+def mount_calendar_routes(app, SessionLocal, caldav: AldenCalDAV) -> None:
+    """
+    Attach CalDAV and DB to app.state and include this router.
+    Call from main.py like:
+        from alden_main.main_agents.routes_calendar import mount_calendar_routes
+        mount_calendar_routes(app, SessionLocal, caldav)
+    """
+    app.state.caldav = caldav
+    app.state.SessionLocal = SessionLocal  # optional but handy for future endpoints
+    app.include_router(router)
+
+
+__all__ = ["router", "mount_calendar_routes"]
