@@ -134,10 +134,10 @@ SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 Base.metadata.create_all(engine)
 
 caldav = AldenCalDAV(
-    base_url=os.environ["CALDAV_BASE_URL"],
-    username=os.environ["CALDAV_USERNAME"],
-    password=os.environ["CALDAV_PASSWORD"],
-    calendar_name=os.getenv("CALDAV_CALENDAR_NAME","Alden"),
+    base_url=os.environ["CALDAV_URL"],
+    username=os.environ["CALDAV_USER"],
+    password=os.environ["CALDAV_PASS"],
+    calendar_name=os.getenv("CALDAV_CAL_NAME","Alden"),
 )
 
 app = FastAPI()
