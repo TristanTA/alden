@@ -1,5 +1,6 @@
 # alden/routers/caldav_routes.py
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from starlette.requests import Requests 
 from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import List, Optional
@@ -47,3 +48,10 @@ def update_event(uid: str, patch: dict):
 def delete_event(uid: str):
     cal.delete_event(uid)
     return {"ok": True}
+    
+def get_caldav(request: Request) -> AldenCalDAV:
+    return request.app.state.caldav
+
+@router.get("/calendars")
+def list_cals(caldav: AldenCalDAV = Depends(get_caldav)):
+    return [c.url for c in caldav.get_calendars()]
