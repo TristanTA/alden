@@ -8,6 +8,7 @@ from dateutil import tz
 from icalendar import Calendar, Event, Alarm, vText
 from caldav import DAVClient, Calendar as CalDAVCalendar, Principal
 from caldav.lib.error import NotFoundError
+from caldav.objects import Principal
 
 # -----------------------------
 # Config helpers
@@ -39,6 +40,22 @@ class AldenCalDAV:
         self.client = DAVClient(self.url, username=self.username, password=self.password)
         self.principal: Principal = self.client.principal()
         self.calendar: CalDAVCalendar = self._ensure_calendar(self.calendar_name)
+
+    def _ensure_connected(self):
+        if self._client is None:
+            self._client = DAVClient(
+                url=self.url,
+                username=self.username,
+                password=self.password,
+                # keep default verify=True for HTTPS; irrelevant for HTTP
+            )
+        if self._principal is None:
+            # This triggers a real request; wrap for nice errors
+            self._principal = self._client.principal()
+
+    def get_calendars(self):
+        self._ensure_connected()
+        return self._principal.calendars()
 
     # Create or fetch the working calendar
     def _ensure_calendar(self, name: str) -> CalDAVCalendar:
