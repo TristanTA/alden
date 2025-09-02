@@ -223,7 +223,7 @@ class AldenCalDAV:
     # -------------------------
     # Queries
     # -------------------------
-    def list_events_between(self,
+    def list_events(self,
                             start: datetime,
                             end: datetime) -> List[Dict[str, Any]]:
         """Return minimal dicts (fast + easy for planning)."""
