@@ -59,7 +59,7 @@ class AldenCalDAV:
 
     # Create or fetch the working calendar
     def _ensure_calendar(self, name: str) -> CalDAVCalendar:
-        calendars = self.principal.calendars()
+        calendars = self._principal.calendars()
         for c in calendars:
             try:
                 props = c.get_properties([("{DAV:}", "displayname")])
@@ -71,7 +71,7 @@ class AldenCalDAV:
                 pass
 
         # Not found → create one
-        new_cal = self.principal.make_calendar(name)
+        new_cal = self._principal.make_calendar(name)
         return new_cal
 
     # -------------------------
