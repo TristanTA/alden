@@ -143,6 +143,18 @@ caldav = AldenCalDAV(
 app = FastAPI()
 
 @app.on_event("startup")
+def startup():
+    app.state.caldav = AldenCalDAV()
+    # Optional: try a light touch to log readiness, but don’t crash on failure
+    try:
+        _ = app.state.caldav.get_calendars()
+        print("✅ CalDAV reachable")
+    except Exception as e:
+        print(f"⚠️ CalDAV not reachable yet: {e}")
+
+app.include_router(caldav_router, prefix="/calendar")
+
+@app.on_event("startup")
 async def _startup():
     asyncio.create_task(poll_loop(caldav, SessionLocal, int(os.getenv("POLL_SECONDS","60"))))
     
